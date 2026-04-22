@@ -1,27 +1,71 @@
 {
-  "name": "bengkel-app",
-  "version": "0.1.0",
-  "private": true,
-  "dependencies": {
-    "@testing-library/dom": "^10.4.1",
-    "@testing-library/jest-dom": "^6.9.1",
-    "@testing-library/react": "^16.3.2",
-    "@testing-library/user-event": "^13.5.0",
-    "react": "^19.2.5",
-    "react-dom": "^19.2.5",
-    "react-scripts": "5.0.1",
-    "web-vitals": "^2.1.4"
-  },
+  "name": "bengkel-maju-jaya",
+  "version": "1.0.0",
+  "description": "Aplikasi Manajemen Bengkel Motor - Desktop App",
+  "main": "electron/main.js",
+  "homepage": "./",
   "scripts": {
-    "start": "react-scripts start",
-    "build": "react-scripts build",
-    "test": "react-scripts test",
-    "eject": "react-scripts eject"
+    "start": "concurrently \"npm run react-start\" \"wait-on http://localhost:3000 && electron .\"",
+    "react-start": "react-scripts start",
+    "react-build": "react-scripts build",
+    "build": "npm run react-build && electron-builder",
+    "electron": "electron .",
+    "dev": "concurrently \"cross-env BROWSER=none react-scripts start\" \"wait-on http://localhost:3000 && nodemon --watch electron --exec electron electron/main.js\""
+  },
+  "dependencies": {
+    "@serialport/bindings-cpp": "^12.0.1",
+    "better-sqlite3": "^9.4.3",
+    "date-fns": "^3.3.1",
+    "electron-store": "^8.1.0",
+    "lucide-react": "^0.383.0",
+    "node-thermal-printer": "^4.3.4",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-scripts": "5.0.1",
+    "serialport": "^12.0.0",
+    "uuid": "^9.0.0",
+    "web-vitals": "^5.2.0"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "cross-env": "^7.0.3",
+    "electron": "^29.4.6",
+    "electron-builder": "^24.13.3",
+    "electron-rebuild": "^3.2.9",
+    "nodemon": "^3.1.0",
+    "wait-on": "^7.2.0"
+  },
+  "build": {
+    "appId": "com.bengkelmaujaya.app",
+    "productName": "Dua Putra Jaya Motor",
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "public/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    },
+    "files": [
+      "build/**/*",
+      "electron/**/*",
+      "node_modules/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "electron/",
+        "to": "electron/"
+      }
+    ]
   },
   "eslintConfig": {
     "extends": [
-      "react-app",
-      "react-app/jest"
+      "react-app"
     ]
   },
   "browserslist": {

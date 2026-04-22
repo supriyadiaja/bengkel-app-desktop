@@ -1,70 +1,180 @@
-# Getting Started with Create React App
+# 🔧 Dua Putra Jaya Motor — Desktop App
+### Aplikasi Manajemen Bengkel Motor (Electron + React + SQLite)
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+---
 
-## Available Scripts
+## 📦 Stack Teknologi
 
-In the project directory, you can run:
+| Layer | Teknologi | Fungsi |
+|-------|-----------|--------|
+| **Desktop Shell** | Electron 29 | Akses hardware, window, file system |
+| **UI** | React 18 + Lucide Icons | Antarmuka pengguna |
+| **Database** | SQLite via better-sqlite3 | Data lokal, offline, cepat |
+| **Thermal Printer** | node-thermal-printer | Cetak struk ESC/POS |
+| **Serial Port** | serialport | Koneksi printer via COM |
 
-### `npm start`
+---
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+## 🚀 Cara Setup (Windows)
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+### Prasyarat
+Pastikan sudah terinstall:
+- [Node.js 20 LTS](https://nodejs.org) ← **wajib versi LTS**
+- [Git](https://git-scm.com)
+- Visual Studio Build Tools (untuk native modules)
 
-### `npm test`
+```
+winget install Microsoft.VisualStudio.2022.BuildTools
+```
+Atau download dari: https://visualstudio.microsoft.com/visual-cpp-build-tools/
+Centang: **"Desktop development with C++"**
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+---
 
-### `npm run build`
+### Langkah Install
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+```bash
+# 1. Clone / buat folder project
+mkdir bengkel-app
+cd bengkel-app
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+# 2. Salin semua file yang sudah disediakan ke folder ini
+#    (package.json, electron/, src/, public/)
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+# 3. Install dependencies
+npm install
 
-### `npm run eject`
+# 4. Rebuild native modules untuk Electron
+npx electron-rebuild -f -w better-sqlite3
+npx electron-rebuild -f -w serialport
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+# 5. Jalankan mode development
+npm run dev
+```
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+---
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
+### Struktur Folder Project
 
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
+```
+bengkel-app/
+├── electron/
+│   ├── main.js          ← Electron main process (IPC, DB, Printer)
+│   ├── preload.js       ← Bridge aman ke React
+│   └── schema.sql       ← Struktur database SQLite
+├── src/
+│   ├── App.jsx          ← React app (UI dari file terpisah)
+│   ├── index.js         ← React entry point
+│   └── pages/           ← Halaman-halaman app
+├── public/
+│   ├── index.html
+│   └── icon.ico
+└── package.json
+```
 
-## Learn More
+---
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+## 🖨️ Setup Thermal Printer
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+### Opsi 1: USB (Plug & Play) — Paling mudah ✅
+1. Colok printer USB ke PC
+2. Windows auto-install driver
+3. Buka Control Panel → Devices and Printers → catat nama printer (contoh: `POS-80`)
+4. Di app → Pengaturan → Printer → masukkan nama printer tersebut
 
-### Code Splitting
+### Opsi 2: Serial Port (COM)
+1. Colok via USB-to-Serial adapter
+2. Buka Device Manager → catat port (contoh: `COM3`)
+3. Di app → Pengaturan → Printer → pilih Serial → pilih `COM3`
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
+### Opsi 3: Network (LAN/WiFi Printer)
+1. Pastikan printer di jaringan yang sama
+2. Cek IP printer (biasanya ada di settings printer)
+3. Di app → Pengaturan → Printer → pilih Network → masukkan IP
 
-### Analyzing the Bundle Size
+### Test Printer
+Di app → Pengaturan → Printer → klik **"Test Print"**
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
+---
 
-### Making a Progressive Web App
+## 🔐 Login Default
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
+| Role | PIN | Akses |
+|------|-----|-------|
+| **Admin** | `1234` | Semua fitur + Laporan Keuangan + Pengaturan |
+| **Kasir** | `0000` | Invoice, Stok, Data Pelanggan (tanpa laporan keuangan) |
 
-### Advanced Configuration
+> ⚠️ **Wajib ubah PIN** setelah pertama kali login!
+> Pengaturan → Akun & Keamanan → Ganti PIN
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
+---
 
-### Deployment
+## 🗃️ Database
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
+- **Lokasi file:** `C:\Users\[nama user]\AppData\Roaming\bengkel-maju-jaya\bengkel.db`
+- **Format:** SQLite (bisa dibuka dengan [DB Browser for SQLite](https://sqlitebrowser.org))
+- **Backup:** Cukup copy file `bengkel.db` ke tempat lain
+- **Restore:** Paste file `bengkel.db` ke lokasi yang sama
 
-### `npm run build` fails to minify
+---
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+## 📦 Build Installer (.exe)
+
+```bash
+# Build production
+npm run build
+
+# Output: dist/Dua Putra Jaya Motor Setup 1.0.0.exe
+```
+
+Installer akan membuat shortcut di Desktop dan Start Menu.
+
+---
+
+## 🐞 Troubleshooting
+
+### "better-sqlite3 was compiled against a different version of Node.js"
+```bash
+npx electron-rebuild -f -w better-sqlite3
+```
+
+### Printer tidak terdeteksi
+- Pastikan driver printer sudah terinstall
+- Cek nama printer di Control Panel → Devices and Printers
+- Coba Test Print dari menu Pengaturan
+
+### App tidak bisa dibuka setelah build
+- Pastikan Visual C++ Redistributable terinstall
+- Download: https://aka.ms/vs/17/release/vc_redist.x64.exe
+
+### Database corrupt / ingin reset
+- Tutup aplikasi
+- Hapus file `bengkel.db` di AppData
+- Buka aplikasi kembali (otomatis buat database baru)
+
+---
+
+## 📋 Fitur Lengkap
+
+- ✅ **Login dengan PIN** — Admin & Kasir, role-based access
+- ✅ **Dashboard** — Ringkasan pendapatan, servis hari ini, stok menipis
+- ✅ **Invoice & Servis** — Buat invoice, tambah item jasa/sparepart, cetak struk
+- ✅ **Cetak Struk Thermal** — 80mm, ESC/POS, support USB/Serial/Network
+- ✅ **Data Pelanggan** — CRUD, riwayat servis per pelanggan
+- ✅ **Stok Sparepart** — Inventaris, alert menipis, riwayat masuk/keluar
+- ✅ **Laporan Keuangan** — Harian, bulanan, per kategori, export
+- ✅ **Pengaturan Bengkel** — Nama, alamat, konfigurasi printer, garansi
+- ✅ **Database Lokal SQLite** — Offline, tidak perlu internet, backup mudah
+
+---
+
+## 🔄 Update Aplikasi
+
+Untuk update manual:
+1. Build versi baru: `npm run build`
+2. Jalankan installer baru — otomatis update, data tetap aman
+
+---
+
+*Dibuat untuk Dua Putra Jaya Motor, Bandung*
+*Stack: Electron 29 + React 18 + SQLite (better-sqlite3) + node-thermal-printer*
