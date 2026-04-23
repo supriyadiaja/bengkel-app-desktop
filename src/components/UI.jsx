@@ -1,4 +1,5 @@
-import { X, Loader2 } from 'lucide-react';
+import { X, Loader2, Search } from 'lucide-react';
+import { createPortal } from 'react-dom';
 
 // ─── Button ──────────────────────────────────────────────────────────────────
 const btnBase = {
@@ -97,13 +98,15 @@ export function CardHeader({ title, subtitle, icon, iconBg, iconColor, actions }
 // ─── Modal ───────────────────────────────────────────────────────────────────
 export function Modal({ open, onClose, title, subtitle, children, footer, width = 540 }) {
   if (!open) return null;
-  return (
+
+  return createPortal(
     <div
       onClick={onClose}
       style={{
-        position: 'fixed', inset: 0, zIndex: 200,
+        position: 'fixed', inset: 0, zIndex: 9999,
         background: 'rgba(17,24,39,0.45)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: '20px',
         backdropFilter: 'blur(4px)',
       }}
     >
@@ -112,29 +115,38 @@ export function Modal({ open, onClose, title, subtitle, children, footer, width 
         className="slide-up"
         style={{
           background: 'var(--surface)', border: '1px solid var(--border)',
-          borderRadius: 14, padding: 26, width, maxWidth: '95vw',
+          borderRadius: 14, width, maxWidth: '95vw',
           maxHeight: '90vh', overflowY: 'auto',
           boxShadow: 'var(--shadow-lg)',
+          display: 'flex', flexDirection: 'column',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20 }}>
+        <div style={{
+          display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between',
+          padding: '22px 26px 16px', borderBottom: '1px solid var(--border)', flexShrink: 0,
+        }}>
           <div>
             <div style={{ fontSize: 16, fontWeight: 800, letterSpacing: '-0.3px' }}>{title}</div>
             {subtitle && <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>{subtitle}</div>}
           </div>
           <Button variant="ghost" size="icon" onClick={onClose} icon={<X size={14} />} />
         </div>
-        {children}
+
+        <div style={{ padding: '20px 26px', overflowY: 'auto', flex: 1 }}>
+          {children}
+        </div>
+
         {footer && (
           <div style={{
             display: 'flex', gap: 10, justifyContent: 'flex-end',
-            marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--border)'
+            padding: '14px 26px', borderTop: '1px solid var(--border)', flexShrink: 0,
           }}>
             {footer}
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -253,7 +265,6 @@ export function Textarea({ value, onChange, placeholder, rows = 3, style }) {
 }
 
 // ─── Search Input ─────────────────────────────────────────────────────────────
-import { Search } from 'lucide-react';
 export function SearchInput({ value, onChange, placeholder = 'Cari...', width = 220 }) {
   return (
     <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>

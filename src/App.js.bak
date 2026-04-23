@@ -9,19 +9,17 @@ import InvoicePage from './pages/InvoicePage';
 import PelangganPage from './pages/PelangganPage';
 import SparepartPage from './pages/SparepartPage';
 import LaporanPage from './pages/LaporanPage';
-import AnalitikPage from './pages/AnalitikPage';
 import { PrinterSettings, BengkelSettings, AkunSettings } from './pages/SettingsPages';
 
 const api = window.api || { invoke: async () => ({}) };
 
 function AppInner() {
   const { toasts, currentUser, setCurrentUser } = useApp();
-  const [page, setPage]         = useState('dashboard');
+  const [page, setPage]       = useState('dashboard');
   const [loggedIn, setLoggedIn] = useState(false);
   const [stokWarning, setStokW] = useState(0);
-  const [stokMenipisList, setStokList] = useState([]);
 
-  // Auto-login in browser dev mode (no window.api)
+  // Auto-login in dev mode (no window.api = browser)
   useEffect(() => {
     if (!window.api) {
       setCurrentUser({ id: 1, nama: 'Administrator', role: 'admin' });
@@ -29,14 +27,10 @@ function AppInner() {
     }
   }, []);
 
-  // Fetch stok warning list on login and page change
+  // Load stok warning count
   useEffect(() => {
     if (loggedIn) {
-      api.invoke('sparepart:getStokMenipis').then(r => {
-        const list = r || [];
-        setStokList(list);
-        setStokW(list.length);
-      });
+      api.invoke('sparepart:getStokMenipis').then(r => setStokW((r || []).length));
     }
   }, [loggedIn, page]);
 
@@ -51,28 +45,6 @@ function AppInner() {
     setPage('dashboard');
   }
 
-  function renderPage() {
-    switch (page) {
-      case 'dashboard': return <Dashboard onNavigate={setPage} />;
-      case 'invoice':   return <InvoicePage />;
-      case 'pelanggan': return <PelangganPage onNewInvoice={() => setPage('invoice')} />;
-      case 'sparepart': return <SparepartPage />;
-      case 'analitik':  return <AnalitikPage />;
-      case 'laporan':
-        return currentUser?.role === 'admin' ? <LaporanPage /> : (
-          <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--text3)' }}>
-            <div style={{ fontSize: 36, marginBottom: 12 }}>🔒</div>
-            <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text2)', marginBottom: 8 }}>Akses Dibatasi</div>
-            <div style={{ fontSize: 13 }}>Fitur laporan keuangan hanya tersedia untuk Admin</div>
-          </div>
-        );
-      case 'printer': return <PrinterSettings />;
-      case 'bengkel': return <BengkelSettings />;
-      case 'akun':    return currentUser?.role === 'admin' ? <AkunSettings /> : null;
-      default:        return <Dashboard onNavigate={setPage} />;
-    }
-  }
-
   if (!loggedIn) {
     return (
       <>
@@ -80,6 +52,26 @@ function AppInner() {
         <Toast toasts={toasts} />
       </>
     );
+  }
+
+  function renderPage() {
+    switch (page) {
+      case 'dashboard': return <Dashboard onNavigate={setPage} />;
+      case 'invoice':   return <InvoicePage />;
+      case 'pelanggan': return <PelangganPage onNewInvoice={() => setPage('invoice')} />;
+      case 'sparepart': return <SparepartPage />;
+      case 'laporan':   return currentUser?.role === 'admin' ? <LaporanPage /> : (
+        <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--text3)' }}>
+          <div style={{ fontSize: 36, marginBottom: 12 }}>🔒</div>
+          <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text2)', marginBottom: 8 }}>Akses Dibatasi</div>
+          <div style={{ fontSize: 13 }}>Fitur laporan keuangan hanya tersedia untuk Admin</div>
+        </div>
+      );
+      case 'printer': return <PrinterSettings />;
+      case 'bengkel': return <BengkelSettings />;
+      case 'akun':    return currentUser?.role === 'admin' ? <AkunSettings /> : null;
+      default:        return <Dashboard onNavigate={setPage} />;
+    }
   }
 
   return (
@@ -90,7 +82,6 @@ function AppInner() {
         currentUser={currentUser}
         onLogout={handleLogout}
         stokWarning={stokWarning}
-        stokMenipisList={stokMenipisList}
       >
         {renderPage()}
       </Layout>

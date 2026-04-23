@@ -1,0 +1,205 @@
+import { useState } from 'react';
+import {
+  LayoutDashboard, FileText, Users, Package, BarChart3,
+  Printer, Store, Shield, LogOut, Bell, Calendar, Wrench, ChevronRight
+} from 'lucide-react';
+
+const NAV = [
+  { id: 'dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+  { id: 'invoice',   icon: FileText,        label: 'Invoice & Servis',   badge: null },
+  { id: 'pelanggan', icon: Users,           label: 'Pelanggan' },
+  { id: 'sparepart', icon: Package,         label: 'Stok Sparepart',      badgeWarn: true },
+  { id: 'laporan',   icon: BarChart3,       label: 'Laporan Keuangan' },
+];
+
+const SETTINGS_NAV = [
+  { id: 'printer',  icon: Printer, label: 'Konfigurasi Printer' },
+  { id: 'bengkel',  icon: Store,   label: 'Profil Bengkel' },
+  { id: 'akun',     icon: Shield,  label: 'Akun & Keamanan' },
+];
+
+const PAGE_META = {
+  dashboard: { title: 'Dashboard',           sub: 'Ringkasan operasional bengkel hari ini' },
+  invoice:   { title: 'Invoice & Servis',    sub: 'Buat invoice baru dan cetak struk thermal printer' },
+  pelanggan: { title: 'Data Pelanggan',      sub: 'Kelola data pelanggan & riwayat kendaraan' },
+  sparepart: { title: 'Stok Sparepart',      sub: 'Manajemen inventaris sparepart & material' },
+  laporan:   { title: 'Laporan Keuangan',    sub: 'Analisis pendapatan & performa bengkel' },
+  printer:   { title: 'Konfigurasi Printer', sub: 'Pengaturan thermal printer 58/80mm' },
+  bengkel:   { title: 'Profil Bengkel',      sub: 'Data dan informasi bengkel' },
+  akun:      { title: 'Akun & Keamanan',     sub: 'Manajemen pengguna dan PIN' },
+};
+
+export default function Layout({ page, setPage, currentUser, onLogout, children, stokWarning }) {
+  const meta = PAGE_META[page] || PAGE_META.dashboard;
+  const today = new Date().toLocaleDateString('id-ID', { weekday:'long', day:'2-digit', month:'long', year:'numeric' });
+
+  return (
+    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: 'var(--bg)' }}>
+
+      {/* ── SIDEBAR ─────────────────────────────────────────── */}
+      <aside style={{
+        width: 234, flexShrink: 0,
+        background: 'var(--surface)', borderRight: '1px solid var(--border)',
+        display: 'flex', flexDirection: 'column',
+        boxShadow: 'var(--shadow-sm)',
+      }}>
+        {/* Brand */}
+        <div style={{ padding: '18px 16px 14px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 11 }}>
+          <div style={{
+            width: 38, height: 38, borderRadius: 10, flexShrink: 0,
+            background: 'linear-gradient(135deg, #e85d04, #f48c06)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            boxShadow: '0 4px 10px rgba(232,93,4,0.28)',
+          }}>
+            <Wrench size={18} color="white" strokeWidth={2.5} />
+          </div>
+          <div>
+            <div style={{ fontSize: 13.5, fontWeight: 800, lineHeight: 1.15, letterSpacing: '-0.2px' }}>
+              Bengkel Maju Jaya
+            </div>
+            <div style={{ fontSize: 9.5, color: 'var(--text3)', fontFamily: "'JetBrains Mono', monospace", marginTop: 2 }}>
+              v1.0 · BANDUNG
+            </div>
+          </div>
+        </div>
+
+        {/* Nav */}
+        <nav style={{ padding: '12px 10px', flex: 1, overflowY: 'auto' }}>
+          <div style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '1.4px', color: 'var(--text3)', padding: '4px 8px 7px', textTransform: 'uppercase' }}>
+            Menu Utama
+          </div>
+          {NAV.map(({ id, icon: Icon, label, badge, badgeWarn }) => {
+            const active = page === id;
+            return (
+              <div key={id} onClick={() => setPage(id)} style={{
+                display: 'flex', alignItems: 'center', gap: 9,
+                padding: '9px 10px', borderRadius: 8, cursor: 'pointer',
+                fontSize: 13, fontWeight: active ? 600 : 500,
+                color: active ? 'var(--accent)' : 'var(--text2)',
+                background: active ? 'var(--accent-light)' : 'transparent',
+                border: `1.5px solid ${active ? 'rgba(232,93,4,0.18)' : 'transparent'}`,
+                marginBottom: 1, transition: 'all 0.12s',
+              }}
+                onMouseEnter={e => { if (!active) { e.currentTarget.style.background = 'var(--surface2)'; e.currentTarget.style.color = 'var(--text)'; }}}
+                onMouseLeave={e => { if (!active) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text2)'; }}}
+              >
+                <Icon size={15} style={{ flexShrink: 0 }} />
+                <span style={{ flex: 1 }}>{label}</span>
+                {badge && (
+                  <span style={{ minWidth: 18, height: 18, background: 'var(--accent)', color: 'white', fontSize: 10, fontWeight: 700, borderRadius: 99, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 5px' }}>
+                    {badge}
+                  </span>
+                )}
+                {badgeWarn && stokWarning > 0 && (
+                  <span style={{ minWidth: 18, height: 18, background: 'var(--yellow)', color: 'white', fontSize: 10, fontWeight: 700, borderRadius: 99, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 5px' }}>
+                    {stokWarning}
+                  </span>
+                )}
+              </div>
+            );
+          })}
+
+          <div style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '1.4px', color: 'var(--text3)', padding: '16px 8px 7px', textTransform: 'uppercase' }}>
+            Pengaturan
+          </div>
+          {SETTINGS_NAV.map(({ id, icon: Icon, label }) => {
+            const active = page === id;
+            return (
+              <div key={id} onClick={() => setPage(id)} style={{
+                display: 'flex', alignItems: 'center', gap: 9,
+                padding: '9px 10px', borderRadius: 8, cursor: 'pointer',
+                fontSize: 13, fontWeight: active ? 600 : 500,
+                color: active ? 'var(--accent)' : 'var(--text2)',
+                background: active ? 'var(--accent-light)' : 'transparent',
+                border: `1.5px solid ${active ? 'rgba(232,93,4,0.18)' : 'transparent'}`,
+                marginBottom: 1, transition: 'all 0.12s',
+              }}
+                onMouseEnter={e => { if (!active) { e.currentTarget.style.background = 'var(--surface2)'; e.currentTarget.style.color = 'var(--text)'; }}}
+                onMouseLeave={e => { if (!active) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text2)'; }}}
+              >
+                <Icon size={15} style={{ flexShrink: 0 }} />
+                {label}
+              </div>
+            );
+          })}
+        </nav>
+
+        {/* User Footer */}
+        <div style={{ padding: '12px 14px', borderTop: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{
+            width: 32, height: 32, borderRadius: '50%', flexShrink: 0,
+            background: 'linear-gradient(135deg, #e85d04, #f48c06)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 12, fontWeight: 700, color: 'white',
+          }}>
+            {currentUser?.nama?.charAt(0) || 'A'}
+          </div>
+          <div style={{ flex: 1, overflow: 'hidden' }}>
+            <div style={{ fontSize: 12.5, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {currentUser?.nama || 'Admin'}
+            </div>
+            <div style={{ fontSize: 10.5, color: 'var(--text3)', textTransform: 'capitalize' }}>
+              {currentUser?.role || 'Administrator'}
+            </div>
+          </div>
+          <div
+            onClick={onLogout} title="Keluar"
+            style={{ color: 'var(--text3)', cursor: 'pointer', padding: 6, borderRadius: 6, display: 'flex', transition: 'all 0.12s' }}
+            onMouseEnter={e => { e.currentTarget.style.background = 'var(--red-bg)'; e.currentTarget.style.color = 'var(--red)'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text3)'; }}
+          >
+            <LogOut size={14} />
+          </div>
+        </div>
+      </aside>
+
+      {/* ── MAIN ────────────────────────────────────────────── */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+
+        {/* Topbar */}
+        <header style={{
+          padding: '12px 24px', background: 'var(--surface)',
+          borderBottom: '1px solid var(--border)',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          boxShadow: 'var(--shadow-sm)', flexShrink: 0,
+        }}>
+          <div>
+            <div style={{ fontSize: 17, fontWeight: 800, letterSpacing: '-0.4px' }}>{meta.title}</div>
+            <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 1 }}>{meta.sub}</div>
+          </div>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              fontSize: 11.5, color: 'var(--text3)',
+              background: 'var(--surface2)', border: '1px solid var(--border)',
+              padding: '7px 11px', borderRadius: 8,
+              fontFamily: "'JetBrains Mono', monospace",
+            }}>
+              <Calendar size={11} />{today}
+            </div>
+            <div style={{
+              width: 36, height: 36, borderRadius: 8,
+              background: 'var(--surface2)', border: '1px solid var(--border)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              cursor: 'pointer', position: 'relative', color: 'var(--text2)',
+            }}>
+              <Bell size={14} />
+              {stokWarning > 0 && (
+                <div style={{
+                  position: 'absolute', top: 7, right: 7,
+                  width: 7, height: 7, background: 'var(--accent)',
+                  borderRadius: '50%', border: '1.5px solid white',
+                }} />
+              )}
+            </div>
+          </div>
+        </header>
+
+        {/* Content */}
+        <main style={{ flex: 1, overflowY: 'auto', padding: '20px 24px' }} className="fade-in">
+          {children}
+        </main>
+      </div>
+    </div>
+  );
+}

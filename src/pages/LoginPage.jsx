@@ -78,7 +78,7 @@ export default function LoginPage({ onLogin }) {
             <Wrench size={26} color="white" strokeWidth={2.5} />
           </div>
           <div style={{ fontSize: 20, fontWeight: 800, letterSpacing: '-0.4px', marginBottom: 4 }}>
-            Dua Putra Jaya Motor
+            Bengkel Maju Jaya
           </div>
           <div style={{ fontSize: 13, color: 'var(--text3)' }}>Masukkan PIN untuk melanjutkan</div>
         </div>
