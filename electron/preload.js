@@ -11,10 +11,11 @@ const INVOKE_CHANNELS = [
   'auth:login', 'auth:getUsers', 'auth:addUser',
   'pelanggan:getAll', 'pelanggan:search', 'pelanggan:add', 'pelanggan:update', 'pelanggan:getRiwayat',
   'invoice:getAll', 'invoice:getById', 'invoice:create', 'invoice:updateStatus',
-  'sparepart:getAll', 'sparepart:getStokMenipis', 'sparepart:add', 'sparepart:stokMasuk', 'sparepart:getMutasi',
+  'sparepart:getAll', 'sparepart:getStokMenipis', 'sparepart:add', 'sparepart:stokMasuk', 'sparepart:getMutasi', 'stok:getAllMutasi',
   'laporan:harian', 'laporan:bulanan',
   'settings:get', 'settings:set',
   'printer:getPorts', 'printer:test', 'printer:printInvoice',
+  'ai:generateInsights', 'ai:generatePrediksi', 'ai:chat',
 ];
 
 const SEND_CHANNELS = [

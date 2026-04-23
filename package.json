@@ -16,6 +16,7 @@
     "@serialport/bindings-cpp": "^12.0.1",
     "better-sqlite3": "^9.4.3",
     "date-fns": "^3.3.1",
+    "dotenv": "^17.4.2",
     "electron-store": "^8.1.0",
     "lucide-react": "^0.383.0",
     "node-thermal-printer": "^4.3.4",

@@ -3,6 +3,8 @@
  * Handles: Window, Database (SQLite), Thermal Printer, Serial Port
  */
 
+require('dotenv').config({ path: '.env.local' });
+
 const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
@@ -14,10 +16,10 @@ function initDatabase() {
   const Database = require('better-sqlite3');
   const userDataPath = app.getPath('userData');
   const dbPath = path.join(userDataPath, 'bengkel.db');
-  
+
   console.log('Database path:', dbPath);
   db = new Database(dbPath);
-  
+
   // Enable WAL mode for better performance
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
@@ -113,7 +115,7 @@ app.on('window-all-closed', () => {
 ipcMain.handle('auth:login', (_, { pin }) => {
   const user = db.prepare('SELECT * FROM users WHERE pin = ? AND aktif = 1').get(pin);
   if (!user) return { success: false, message: 'PIN salah atau akun tidak aktif' };
-  
+
   // Don't return PIN to renderer
   const { pin: _pin, ...safeUser } = user;
   return { success: true, user: safeUser };
@@ -195,8 +197,8 @@ ipcMain.handle('pelanggan:getRiwayat', (_, pelangganId) => {
 function generateInvoiceNo() {
   const now = new Date();
   const pad = (n) => String(n).padStart(2, '0');
-  const prefix = `INV-${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}`;
-  
+  const prefix = `INV-${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}`;
+
   const last = db.prepare(`
     SELECT no_invoice FROM invoice 
     WHERE no_invoice LIKE ? 
@@ -230,7 +232,7 @@ ipcMain.handle('invoice:getById', (_, id) => {
     FROM invoice i JOIN pelanggan p ON p.id = i.pelanggan_id
     WHERE i.id = ?
   `).get(id);
-  
+
   if (!inv) return null;
   inv.items = db.prepare('SELECT * FROM invoice_item WHERE invoice_id = ?').all(id);
   return inv;
@@ -334,6 +336,149 @@ ipcMain.handle('sparepart:getMutasi', (_, sparepartId) => {
   `).all(sparepartId);
 });
 
+ipcMain.handle('stok:getAllMutasi', () => {
+  return db.prepare(`
+    SELECT 
+      sm.*,
+      sp.kode     AS kode_sparepart,
+      sp.nama     AS nama_sparepart,
+      sp.kategori AS kategori
+    FROM stok_mutasi sm
+    LEFT JOIN sparepart sp ON sp.id = sm.sparepart_id
+    ORDER BY sm.created_at DESC
+    LIMIT 500
+  `).all();
+});
+
+// ─── IPC: Groq AI ─────────────────────────────────────────────────────────────
+async function callGroq(systemPrompt, userPrompt, maxTokens = 1024) {
+  const apiKey = process.env.GROQ_API_KEY;
+  if (!apiKey) return { success: false, message: 'GROQ_API_KEY tidak ditemukan di .env.local' };
+
+  const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: 'llama-3.1-8b-instant',
+      max_tokens: maxTokens,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user',   content: userPrompt },
+      ],
+    }),
+  });
+
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error(`Groq API error: ${err}`);
+  }
+
+  const result = await response.json();
+  return result.choices?.[0]?.message?.content || '';
+}
+
+ipcMain.handle('ai:generateInsights', async (_, summary) => {
+  try {
+    const text = await callGroq(
+      `Kamu adalah konsultan bisnis bengkel motor berpengalaman di Indonesia.
+Berikan analisis praktis, spesifik, dan actionable dalam Bahasa Indonesia.
+Selalu gunakan angka nyata dari data. Response hanya JSON murni tanpa backticks.`,
+      `Analisis data bengkel ini dan berikan 5 insight bisnis paling valuable:
+
+${JSON.stringify(summary, null, 2)}
+
+Balas HANYA dengan JSON array ini (tanpa teks lain):
+[
+  {
+    "tipe": "peluang" | "peringatan" | "rekomendasi" | "tren",
+    "judul": "Judul singkat",
+    "isi": "Penjelasan 2-3 kalimat dengan angka spesifik",
+    "aksi": "Satu tindakan konkret yang bisa dilakukan hari ini",
+    "dampak": "tinggi" | "sedang" | "rendah"
+  }
+]`
+    );
+    const cleaned = text.replace(/```json|```/g, '').trim();
+    const parsed = JSON.parse(cleaned);
+    return { success: true, data: Array.isArray(parsed) ? parsed : [] };
+  } catch (e) {
+    console.error('ai:generateInsights error:', e);
+    return { success: false, message: e.message };
+  }
+});
+
+ipcMain.handle('ai:generatePrediksi', async (_, stokData) => {
+  try {
+    const text = await callGroq(
+      'Kamu adalah sistem prediksi stok bengkel motor. Balas HANYA JSON murni tanpa backticks.',
+      `Analisis dan buat prediksi restock untuk sparepart ini:
+${JSON.stringify(stokData)}
+
+Hitung: hari_habis = stok / (terjual_30hari/30)
+Rekomendasikan qty_restock = terjual_30hari * 1.5
+
+Balas HANYA JSON array:
+[
+  {
+    "kode": "SP001",
+    "nama": "nama item",
+    "hari_habis": 15,
+    "prioritas": "segera" | "minggu_ini" | "bulan_ini" | "aman",
+    "qty_restock": 24,
+    "estimasi_biaya": 1320000,
+    "alasan": "penjelasan singkat"
+  }
+]
+Urutkan dari prioritas paling tinggi.`
+    );
+    const cleaned = text.replace(/```json|```/g, '').trim();
+    const parsed = JSON.parse(cleaned);
+    return { success: true, data: Array.isArray(parsed) ? parsed : [] };
+  } catch (e) {
+    console.error('ai:generatePrediksi error:', e);
+    return { success: false, message: e.message };
+  }
+});
+
+ipcMain.handle('ai:chat', async (_, { messages, context }) => {
+  try {
+    const apiKey = process.env.GROQ_API_KEY;
+    if (!apiKey) return { success: false, message: 'GROQ_API_KEY tidak ditemukan' };
+
+    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: 'llama-3.1-8b-instant',
+        max_tokens: 1024,
+        messages: [
+          {
+            role: 'system',
+            content: `Kamu adalah konsultan bisnis bengkel motor berpengalaman. 
+Gunakan Bahasa Indonesia yang ramah namun profesional. 
+Berikan jawaban konkret, praktis, dan berbasis data.
+Data bengkel saat ini: ${JSON.stringify(context)}`,
+          },
+          ...messages,
+        ],
+      }),
+    });
+
+    const result = await response.json();
+    const reply = result.choices?.[0]?.message?.content || 'Maaf, tidak bisa memproses.';
+    return { success: true, data: reply };
+  } catch (e) {
+    console.error('ai:chat error:', e);
+    return { success: false, message: e.message };
+  }
+});
+
 // ─── IPC: Laporan ─────────────────────────────────────────────────────────────
 ipcMain.handle('laporan:harian', (_, { dari, sampai }) => {
   return db.prepare(`
@@ -344,9 +489,9 @@ ipcMain.handle('laporan:harian', (_, { dari, sampai }) => {
 });
 
 ipcMain.handle('laporan:bulanan', (_, { tahun, bulan }) => {
-  const dari = `${tahun}-${String(bulan).padStart(2,'0')}-01`;
-  const sampai = `${tahun}-${String(bulan).padStart(2,'0')}-31`;
-  
+  const dari = `${tahun}-${String(bulan).padStart(2, '0')}-01`;
+  const sampai = `${tahun}-${String(bulan).padStart(2, '0')}-31`;
+
   const summary = db.prepare(`
     SELECT 
       SUM(total) as total_pendapatan,
@@ -355,7 +500,7 @@ ipcMain.handle('laporan:bulanan', (_, { tahun, bulan }) => {
     FROM invoice
     WHERE tanggal BETWEEN ? AND ? AND status = 'Lunas'
   `).get(dari, sampai);
-  
+
   const perKategori = db.prepare(`
     SELECT 
       CASE WHEN ii.satuan = 'Jasa' THEN 'Jasa Servis' ELSE 'Sparepart' END as kategori,
@@ -394,7 +539,7 @@ ipcMain.handle('printer:getPorts', async () => {
 ipcMain.handle('printer:test', async (_, { type, interface: iface, host, port: printerPort, serialPath }) => {
   try {
     const { ThermalPrinter, PrinterTypes, CharacterSet } = require('node-thermal-printer');
-    
+
     const printerConfig = {
       type: printerPort === 'EPSON' ? PrinterTypes.EPSON : PrinterTypes.STAR,
       characterSet: CharacterSet.PC852_LATIN2,
@@ -412,7 +557,7 @@ ipcMain.handle('printer:test', async (_, { type, interface: iface, host, port: p
 
     const printer = new ThermalPrinter(printerConfig);
     const isConnected = await printer.isPrinterConnected();
-    
+
     if (!isConnected) return { success: false, message: 'Printer tidak terhubung' };
 
     printer.alignCenter();
@@ -431,7 +576,7 @@ ipcMain.handle('printer:test', async (_, { type, interface: iface, host, port: p
 ipcMain.handle('printer:printInvoice', async (_, invoiceId) => {
   try {
     const { ThermalPrinter, PrinterTypes, CharacterSet } = require('node-thermal-printer');
-    
+
     // Get printer settings from DB
     const settings = db.prepare('SELECT * FROM pengaturan').all()
       .reduce((acc, row) => { acc[row.key] = row.value; return acc; }, {});
@@ -442,7 +587,7 @@ ipcMain.handle('printer:printInvoice', async (_, invoiceId) => {
       FROM invoice i JOIN pelanggan p ON p.id = i.pelanggan_id
       WHERE i.id = ?
     `).get(invoiceId);
-    
+
     if (!inv) return { success: false, message: 'Invoice tidak ditemukan' };
     inv.items = db.prepare('SELECT * FROM invoice_item WHERE invoice_id = ?').all(invoiceId);
 
@@ -477,7 +622,7 @@ ipcMain.handle('printer:printInvoice', async (_, invoiceId) => {
 
     printer.alignLeft();
     printer.println(`No : ${inv.no_invoice}`);
-    printer.println(`Tgl: ${new Date(inv.tanggal || inv.created_at).toLocaleDateString('id-ID', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' })}`);
+    printer.println(`Tgl: ${new Date(inv.tanggal || inv.created_at).toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}`);
     printer.println(`Plg: ${inv.nama_pelanggan}`);
     printer.println(`WA : ${inv.no_telp}`);
     printer.println(`Mtr: ${inv.jenis_motor} / ${inv.no_plat}`);
@@ -487,11 +632,11 @@ ipcMain.handle('printer:printInvoice', async (_, invoiceId) => {
 
     // Items
     for (const item of inv.items) {
-      const nameLine = item.nama_item.length > 28 
-        ? item.nama_item.substring(0, 28) 
+      const nameLine = item.nama_item.length > 28
+        ? item.nama_item.substring(0, 28)
         : item.nama_item;
       printer.println(nameLine);
-      
+
       const qtyHarga = `  ${item.qty} x ${formatRupiah(item.harga)}`;
       const subtotal = formatRupiah(item.subtotal);
       const padding = 48 - qtyHarga.length - subtotal.length;

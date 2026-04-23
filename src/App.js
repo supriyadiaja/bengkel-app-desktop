@@ -10,6 +10,7 @@ import PelangganPage from './pages/PelangganPage';
 import SparepartPage from './pages/SparepartPage';
 import LaporanPage from './pages/LaporanPage';
 import AnalitikPage from './pages/AnalitikPage';
+import RiwayatGudangPage from './pages/RiwayatGudangPage';
 import { PrinterSettings, BengkelSettings, AkunSettings } from './pages/SettingsPages';
 
 const api = window.api || { invoke: async () => ({}) };
@@ -56,6 +57,7 @@ function AppInner() {
       case 'dashboard': return <Dashboard onNavigate={setPage} />;
       case 'invoice':   return <InvoicePage />;
       case 'pelanggan': return <PelangganPage onNewInvoice={() => setPage('invoice')} />;
+      case 'gudang': return <RiwayatGudangPage />;
       case 'sparepart': return <SparepartPage />;
       case 'analitik':  return <AnalitikPage />;
       case 'laporan':

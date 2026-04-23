@@ -2,38 +2,40 @@ import { useState, useEffect, useRef } from 'react';
 import {
   LayoutDashboard, FileText, Users, Package, BarChart3,
   Printer, Store, Shield, LogOut, Bell, Calendar, Wrench,
-  AlertTriangle, XCircle, ChevronRight, X, Brain
+  AlertTriangle, XCircle, ChevronRight, X, Brain, Warehouse
 } from 'lucide-react';
 
 const NAV = [
   { id: 'dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-  { id: 'invoice',   icon: FileText,        label: 'Invoice & Servis' },
-  { id: 'pelanggan', icon: Users,           label: 'Pelanggan' },
-  { id: 'sparepart', icon: Package,         label: 'Stok Sparepart', badgeWarn: true },
-  { id: 'laporan',   icon: BarChart3,       label: 'Laporan Keuangan' },
-  { id: 'analitik',  icon: Brain,           label: 'AI Analitik',    badgeNew: true },
+  { id: 'invoice', icon: FileText, label: 'Invoice & Servis' },
+  { id: 'pelanggan', icon: Users, label: 'Pelanggan' },
+  { id: 'gudang', icon: Warehouse, label: 'Riwayat Gudang' },
+  { id: 'sparepart', icon: Package, label: 'Stok Sparepart', badgeWarn: true },
+  { id: 'laporan', icon: BarChart3, label: 'Laporan Keuangan' },
+  { id: 'analitik', icon: Brain, label: 'AI Analitik', badgeNew: true },
 ];
 
 const SETTINGS_NAV = [
   { id: 'printer', icon: Printer, label: 'Konfigurasi Printer' },
-  { id: 'bengkel', icon: Store,   label: 'Profil Bengkel' },
-  { id: 'akun',    icon: Shield,  label: 'Akun & Keamanan' },
+  { id: 'bengkel', icon: Store, label: 'Profil Bengkel' },
+  { id: 'akun', icon: Shield, label: 'Akun & Keamanan' },
 ];
 
 const PAGE_META = {
-  dashboard: { title: 'Dashboard',           sub: 'Ringkasan operasional bengkel hari ini' },
-  invoice:   { title: 'Invoice & Servis',    sub: 'Buat invoice baru dan cetak struk thermal printer' },
-  pelanggan: { title: 'Data Pelanggan',      sub: 'Kelola data pelanggan & riwayat kendaraan' },
-  sparepart: { title: 'Stok Sparepart',      sub: 'Manajemen inventaris sparepart & material' },
-  laporan:   { title: 'Laporan Keuangan',    sub: 'Analisis pendapatan & performa bengkel' },
-  analitik:  { title: 'AI Analitik',         sub: 'Wawasan cerdas berbasis data transaksi bengkel kamu' },
-  printer:   { title: 'Konfigurasi Printer', sub: 'Pengaturan thermal printer 58/80mm' },
-  bengkel:   { title: 'Profil Bengkel',      sub: 'Data dan informasi bengkel' },
-  akun:      { title: 'Akun & Keamanan',     sub: 'Manajemen pengguna dan PIN' },
+  dashboard: { title: 'Dashboard', sub: 'Ringkasan operasional bengkel hari ini' },
+  invoice: { title: 'Invoice & Servis', sub: 'Buat invoice baru dan cetak struk thermal printer' },
+  pelanggan: { title: 'Data Pelanggan', sub: 'Kelola data pelanggan & riwayat kendaraan' },
+  gudang: { title: 'Riwayat Gudang', sub: 'History keluar masuk stok sparepart' },
+  sparepart: { title: 'Stok Sparepart', sub: 'Manajemen inventaris sparepart & material' },
+  laporan: { title: 'Laporan Keuangan', sub: 'Analisis pendapatan & performa bengkel' },
+  analitik: { title: 'AI Analitik', sub: 'Wawasan cerdas berbasis data transaksi bengkel kamu' },
+  printer: { title: 'Konfigurasi Printer', sub: 'Pengaturan thermal printer 58/80mm' },
+  bengkel: { title: 'Profil Bengkel', sub: 'Data dan informasi bengkel' },
+  akun: { title: 'Akun & Keamanan', sub: 'Manajemen pengguna dan PIN' },
 };
 
 export default function Layout({ page, setPage, currentUser, onLogout, children, stokWarning = 0, stokMenipisList = [] }) {
-  const meta  = PAGE_META[page] || PAGE_META.dashboard;
+  const meta = PAGE_META[page] || PAGE_META.dashboard;
   const today = new Date().toLocaleDateString('id-ID', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' });
   const [notifOpen, setNotifOpen] = useState(false);
   const notifRef = useRef(null);
@@ -78,8 +80,8 @@ export default function Layout({ page, setPage, currentUser, onLogout, children,
             const active = page === id;
             return (
               <div key={id} onClick={() => setPage(id)} style={navItemStyle(active)}
-                onMouseEnter={e => { if (!active) { e.currentTarget.style.background = 'var(--surface2)'; e.currentTarget.style.color = 'var(--text)'; }}}
-                onMouseLeave={e => { if (!active) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text2)'; }}}
+                onMouseEnter={e => { if (!active) { e.currentTarget.style.background = 'var(--surface2)'; e.currentTarget.style.color = 'var(--text)'; } }}
+                onMouseLeave={e => { if (!active) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text2)'; } }}
               >
                 <Icon size={15} style={{ flexShrink: 0 }} />
                 <span style={{ flex: 1 }}>{label}</span>
@@ -98,8 +100,8 @@ export default function Layout({ page, setPage, currentUser, onLogout, children,
             const active = page === id;
             return (
               <div key={id} onClick={() => setPage(id)} style={navItemStyle(active)}
-                onMouseEnter={e => { if (!active) { e.currentTarget.style.background = 'var(--surface2)'; e.currentTarget.style.color = 'var(--text)'; }}}
-                onMouseLeave={e => { if (!active) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text2)'; }}}
+                onMouseEnter={e => { if (!active) { e.currentTarget.style.background = 'var(--surface2)'; e.currentTarget.style.color = 'var(--text)'; } }}
+                onMouseLeave={e => { if (!active) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text2)'; } }}
               >
                 <Icon size={15} style={{ flexShrink: 0 }} />{label}
               </div>

@@ -13,7 +13,7 @@ const api = window.api || { invoke: mockInvoke };
 export default function AnalitikPage() {
   const [tab, setTab] = useState('insight');   // insight | terlaris | prediksi | chat
   const [loading, setLoading] = useState(false);
-  const [data, setData]       = useState(null);
+  const [data, setData] = useState(null);
   const [insights, setInsights] = useState([]);
   const [insightLoading, setInsightLoading] = useState(false);
 
@@ -40,52 +40,26 @@ export default function AnalitikPage() {
     const summary = buildSummary(data);
 
     try {
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 1000,
-          system: `Kamu adalah konsultan bisnis bengkel motor berpengalaman di Indonesia. 
-Berikan analisis praktis, spesifik, dan actionable dalam Bahasa Indonesia.
-Selalu gunakan angka nyata dari data. Gunakan format JSON array.
-Response hanya JSON murni tanpa backticks.`,
-          messages: [{
-            role: 'user',
-            content: `Analisis data bengkel ini dan berikan 5 insight bisnis paling valuable:
-
-${JSON.stringify(summary, null, 2)}
-
-Balas HANYA dengan JSON array ini (tanpa teks lain):
-[
-  {
-    "tipe": "peluang" | "peringatan" | "rekomendasi" | "tren",
-    "judul": "Judul singkat",
-    "isi": "Penjelasan 2-3 kalimat dengan angka spesifik",
-    "aksi": "Satu tindakan konkret yang bisa dilakukan hari ini",
-    "dampak": "tinggi" | "sedang" | "rendah"
-  }
-]`
-          }]
-        })
-      });
-
-      const result = await response.json();
-      const text = result.content?.[0]?.text || '[]';
-      const parsed = JSON.parse(text.replace(/```json|```/g, '').trim());
-      setInsights(Array.isArray(parsed) ? parsed : []);
+      const res = await api.invoke('ai:generateInsights', summary);
+      if (res.success) {
+        setInsights(res.data);
+      } else {
+        console.error('AI error:', res.message);
+        setInsights(FALLBACK_INSIGHTS);
+      }
     } catch (e) {
-      console.error('AI error:', e);
+      console.error('generateInsights error:', e);
       setInsights(FALLBACK_INSIGHTS);
     }
+
     setInsightLoading(false);
   }
 
   const tabs = [
-    { id: 'insight',  label: 'AI Insights',     icon: <Brain size={14} /> },
-    { id: 'terlaris', label: 'Terlaris',         icon: <Star size={14} /> },
+    { id: 'insight', label: 'AI Insights', icon: <Brain size={14} /> },
+    { id: 'terlaris', label: 'Terlaris', icon: <Star size={14} /> },
     { id: 'prediksi', label: 'Prediksi Restock', icon: <Package size={14} /> },
-    { id: 'chat',     label: 'Tanya AI',         icon: <Bot size={14} /> },
+    { id: 'chat', label: 'Tanya AI', icon: <Bot size={14} /> },
   ];
 
   return (
@@ -97,7 +71,7 @@ Balas HANYA dengan JSON array ini (tanpa teks lain):
         </div>
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 15, fontWeight: 800, color: '#5b21b6' }}>AI Analitik Bengkel</div>
-          <div style={{ fontSize: 12, color: '#7c3aed', marginTop: 1 }}>Didukung Claude AI · Analisis berbasis data transaksi nyata kamu</div>
+          <div style={{ fontSize: 12, color: '#7c3aed', marginTop: 1 }}>Didukung Groq AI · Analisis berbasis data transaksi nyata kamu</div>
         </div>
         <Button variant="ghost" size="sm" icon={<RefreshCw size={12} />} onClick={loadRawData} style={{ borderColor: 'rgba(124,58,237,0.3)', color: 'var(--purple)' }}>
           Refresh Data
@@ -124,10 +98,10 @@ Balas HANYA dengan JSON array ini (tanpa teks lain):
       </div>
 
       {/* Tab content */}
-      {tab === 'insight'  && <InsightTab data={data} insights={insights} loading={insightLoading} onGenerate={generateInsights} />}
+      {tab === 'insight' && <InsightTab data={data} insights={insights} loading={insightLoading} onGenerate={generateInsights} />}
       {tab === 'terlaris' && <TerlarisTab data={data} />}
       {tab === 'prediksi' && <PrediksiTab data={data} />}
-      {tab === 'chat'     && <ChatTab data={data} />}
+      {tab === 'chat' && <ChatTab data={data} />}
     </div>
   );
 }
@@ -135,16 +109,16 @@ Balas HANYA dengan JSON array ini (tanpa teks lain):
 // ─── Summary Row ──────────────────────────────────────────────────────────────
 function SummaryRow({ data }) {
   const totalPend = data.lapHarian.reduce((s, d) => s + (d.total_pendapatan || 0), 0);
-  const totalTrx  = data.lapHarian.reduce((s, d) => s + (d.total_transaksi || 0), 0);
+  const totalTrx = data.lapHarian.reduce((s, d) => s + (d.total_transaksi || 0), 0);
   const stokKritis = data.spareparts.filter(s => s.stok <= s.stok_minimum).length;
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 16 }}>
       {[
         { label: 'Pendapatan 30 Hari', value: formatRupiah(totalPend), color: 'var(--accent)', bg: 'var(--accent-light)', icon: <TrendingUp size={17} /> },
-        { label: 'Total Transaksi',    value: `${totalTrx}x`,           color: 'var(--green)',  bg: 'var(--green-bg)',  icon: <CheckCircle size={17} /> },
-        { label: 'Item Sparepart',     value: data.spareparts.length,    color: 'var(--blue)',   bg: 'var(--blue-bg)',  icon: <Package size={17} /> },
-        { label: 'Stok Kritis',        value: `${stokKritis} item`,      color: 'var(--red)',    bg: 'var(--red-bg)',   icon: <AlertTriangle size={17} /> },
+        { label: 'Total Transaksi', value: `${totalTrx}x`, color: 'var(--green)', bg: 'var(--green-bg)', icon: <CheckCircle size={17} /> },
+        { label: 'Item Sparepart', value: data.spareparts.length, color: 'var(--blue)', bg: 'var(--blue-bg)', icon: <Package size={17} /> },
+        { label: 'Stok Kritis', value: `${stokKritis} item`, color: 'var(--red)', bg: 'var(--red-bg)', icon: <AlertTriangle size={17} /> },
       ].map((s, i) => (
         <div key={i} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: '14px 16px', boxShadow: 'var(--shadow-sm)', display: 'flex', alignItems: 'center', gap: 12 }}>
           <div style={{ width: 36, height: 36, borderRadius: 9, background: s.bg, color: s.color, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{s.icon}</div>
@@ -161,10 +135,10 @@ function SummaryRow({ data }) {
 // ─── Insight Tab ──────────────────────────────────────────────────────────────
 function InsightTab({ data, insights, loading, onGenerate }) {
   const tipeConfig = {
-    peluang:      { color: 'var(--green)',  bg: 'var(--green-bg)',  label: '💡 Peluang' },
-    peringatan:   { color: 'var(--red)',    bg: 'var(--red-bg)',    label: '⚠ Peringatan' },
-    rekomendasi:  { color: 'var(--blue)',   bg: 'var(--blue-bg)',   label: '✅ Rekomendasi' },
-    tren:         { color: 'var(--purple)', bg: 'var(--purple-bg)', label: '📈 Tren' },
+    peluang: { color: 'var(--green)', bg: 'var(--green-bg)', label: '💡 Peluang' },
+    peringatan: { color: 'var(--red)', bg: 'var(--red-bg)', label: '⚠ Peringatan' },
+    rekomendasi: { color: 'var(--blue)', bg: 'var(--blue-bg)', label: '✅ Rekomendasi' },
+    tren: { color: 'var(--purple)', bg: 'var(--purple-bg)', label: '📈 Tren' },
   };
   const dampakColor = { tinggi: 'var(--red)', sedang: 'var(--yellow)', rendah: 'var(--green)' };
 
@@ -325,7 +299,7 @@ function TerlarisTab({ data }) {
 // ─── Prediksi Restock ─────────────────────────────────────────────────────────
 function PrediksiTab({ data }) {
   const [generating, setGenerating] = useState(false);
-  const [prediksi, setPrediksi]     = useState([]);
+  const [prediksi, setPrediksi] = useState([]);
 
   if (!data) return null;
 
@@ -343,52 +317,26 @@ function PrediksiTab({ data }) {
     }));
 
     try {
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 1000,
-          system: 'Kamu adalah sistem prediksi stok bengkel motor. Balas HANYA JSON murni.',
-          messages: [{
-            role: 'user',
-            content: `Analisis dan buat prediksi restock untuk sparepart ini:
-${JSON.stringify(stokData)}
-
-Hitung: hari_habis = stok / (terjual_30hari/30)
-Rekomendasikan qty_restock = terjual_30hari * 1.5
-
-Balas HANYA JSON array:
-[
-  {
-    "kode": "SP001",
-    "nama": "nama item",
-    "hari_habis": 15,
-    "prioritas": "segera" | "minggu_ini" | "bulan_ini" | "aman",
-    "qty_restock": 24,
-    "estimasi_biaya": 1320000,
-    "alasan": "penjelasan singkat"
-  }
-]
-Urutkan dari prioritas paling tinggi.`
-          }]
-        })
-      });
-      const result = await response.json();
-      const text = result.content?.[0]?.text || '[]';
-      const parsed = JSON.parse(text.replace(/```json|```/g, '').trim());
-      setPrediksi(Array.isArray(parsed) ? parsed : []);
+      const res = await api.invoke('ai:generatePrediksi', stokData);
+      if (res.success) {
+        setPrediksi(res.data);
+      } else {
+        console.error('AI error:', res.message);
+        setPrediksi(FALLBACK_PREDIKSI);
+      }
     } catch (e) {
+      console.error('generatePrediksi error:', e);
       setPrediksi(FALLBACK_PREDIKSI);
     }
+
     setGenerating(false);
   }
 
   const prioritasConfig = {
-    segera:     { color: 'var(--red)',    bg: 'var(--red-bg)',    label: '🔴 Segera' },
+    segera: { color: 'var(--red)', bg: 'var(--red-bg)', label: '🔴 Segera' },
     minggu_ini: { color: 'var(--yellow)', bg: 'var(--yellow-bg)', label: '🟡 Minggu Ini' },
-    bulan_ini:  { color: 'var(--blue)',   bg: 'var(--blue-bg)',   label: '🔵 Bulan Ini' },
-    aman:       { color: 'var(--green)',  bg: 'var(--green-bg)',  label: '🟢 Aman' },
+    bulan_ini: { color: 'var(--blue)', bg: 'var(--blue-bg)', label: '🔵 Bulan Ini' },
+    aman: { color: 'var(--green)', bg: 'var(--green-bg)', label: '🟢 Aman' },
   };
 
   return (
@@ -471,7 +419,7 @@ function ChatTab({ data }) {
   const [messages, setMessages] = useState([
     { role: 'assistant', content: 'Halo! Saya AI konsultan bengkel kamu. Tanya apa saja tentang bisnis, stok, pendapatan, atau strategi bengkel kamu. Saya sudah punya akses ke data bengkel kamu.' }
   ]);
-  const [input, setInput]   = useState('');
+  const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const bottomRef = useRef(null);
 
@@ -496,25 +444,20 @@ function ChatTab({ data }) {
     const context = data ? buildSummary(data) : {};
 
     try {
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 1000,
-          system: `Kamu adalah konsultan bisnis bengkel motor berpengalaman. 
-Gunakan Bahasa Indonesia yang ramah namun profesional. 
-Berikan jawaban konkret, praktis, dan berbasis data.
-Data bengkel: ${JSON.stringify(context)}`,
-          messages: newMessages.map(m => ({ role: m.role, content: m.content }))
-        })
+      const res = await api.invoke('ai:chat', {
+        messages: newMessages.map(m => ({ role: m.role, content: m.content })),
+        context,
       });
-      const result = await response.json();
-      const reply = result.content?.[0]?.text || 'Maaf, tidak bisa memproses pertanyaan itu.';
-      setMessages(prev => [...prev, { role: 'assistant', content: reply }]);
+
+      if (res.success) {
+        setMessages(prev => [...prev, { role: 'assistant', content: res.data }]);
+      } else {
+        setMessages(prev => [...prev, { role: 'assistant', content: `Error: ${res.message}` }]);
+      }
     } catch (e) {
-      setMessages(prev => [...prev, { role: 'assistant', content: 'Maaf, terjadi error. Pastikan koneksi internet aktif.' }]);
+      setMessages(prev => [...prev, { role: 'assistant', content: 'Maaf, terjadi error koneksi.' }]);
     }
+
     setLoading(false);
   }
 
@@ -598,7 +541,7 @@ function thirtyDaysAgo() {
 
 function buildSummary(data) {
   const totalPend = data.lapHarian.reduce((s, d) => s + (d.total_pendapatan || 0), 0);
-  const totalTrx  = data.lapHarian.reduce((s, d) => s + (d.total_transaksi || 0), 0);
+  const totalTrx = data.lapHarian.reduce((s, d) => s + (d.total_transaksi || 0), 0);
   return {
     periode: '30 hari terakhir',
     total_pendapatan: totalPend,
@@ -629,21 +572,21 @@ const FALLBACK_PREDIKSI = [
 ];
 
 async function mockInvoke(ch, args) {
-  if (ch === 'sparepart:getAll')  return MOCK_SP;
-  if (ch === 'invoice:getAll')    return [];
-  if (ch === 'laporan:harian')    return MOCK_LAP;
+  if (ch === 'sparepart:getAll') return MOCK_SP;
+  if (ch === 'invoice:getAll') return [];
+  if (ch === 'laporan:harian') return MOCK_LAP;
   return [];
 }
 const MOCK_SP = [
-  { id:1, kode:'SP001', nama:'Oli Yamalube 10W-40 1L', kategori:'Oli', stok:24, stok_minimum:10, harga_beli:55000, harga_jual:65000, satuan:'Botol' },
-  { id:2, kode:'SP002', nama:'Filter Udara Honda Beat', kategori:'Filter', stok:3, stok_minimum:5, harga_beli:35000, harga_jual:45000, satuan:'Pcs' },
-  { id:3, kode:'SP003', nama:'Busi NGK CPR8EA', kategori:'Busi', stok:18, stok_minimum:8, harga_beli:20000, harga_jual:28000, satuan:'Pcs' },
-  { id:4, kode:'SP004', nama:'Kampas Rem Universal', kategori:'Rem', stok:7, stok_minimum:6, harga_beli:40000, harga_jual:55000, satuan:'Set' },
-  { id:5, kode:'SP005', nama:'Rantai RK 428H', kategori:'Rantai', stok:2, stok_minimum:4, harga_beli:100000, harga_jual:135000, satuan:'Pcs' },
-  { id:6, kode:'SP006', nama:'Ban IRC NR 53', kategori:'Ban', stok:6, stok_minimum:4, harga_beli:140000, harga_jual:185000, satuan:'Pcs' },
-  { id:7, kode:'SP007', nama:'Aki Yuasa YTZ5S', kategori:'Aki', stok:0, stok_minimum:2, harga_beli:220000, harga_jual:285000, satuan:'Pcs' },
+  { id: 1, kode: 'SP001', nama: 'Oli Yamalube 10W-40 1L', kategori: 'Oli', stok: 24, stok_minimum: 10, harga_beli: 55000, harga_jual: 65000, satuan: 'Botol' },
+  { id: 2, kode: 'SP002', nama: 'Filter Udara Honda Beat', kategori: 'Filter', stok: 3, stok_minimum: 5, harga_beli: 35000, harga_jual: 45000, satuan: 'Pcs' },
+  { id: 3, kode: 'SP003', nama: 'Busi NGK CPR8EA', kategori: 'Busi', stok: 18, stok_minimum: 8, harga_beli: 20000, harga_jual: 28000, satuan: 'Pcs' },
+  { id: 4, kode: 'SP004', nama: 'Kampas Rem Universal', kategori: 'Rem', stok: 7, stok_minimum: 6, harga_beli: 40000, harga_jual: 55000, satuan: 'Set' },
+  { id: 5, kode: 'SP005', nama: 'Rantai RK 428H', kategori: 'Rantai', stok: 2, stok_minimum: 4, harga_beli: 100000, harga_jual: 135000, satuan: 'Pcs' },
+  { id: 6, kode: 'SP006', nama: 'Ban IRC NR 53', kategori: 'Ban', stok: 6, stok_minimum: 4, harga_beli: 140000, harga_jual: 185000, satuan: 'Pcs' },
+  { id: 7, kode: 'SP007', nama: 'Aki Yuasa YTZ5S', kategori: 'Aki', stok: 0, stok_minimum: 2, harga_beli: 220000, harga_jual: 285000, satuan: 'Pcs' },
 ];
-const MOCK_LAP = Array.from({length:30},(_,i)=>{
-  const d=new Date(); d.setDate(d.getDate()-i);
-  return { tanggal:d.toISOString().split('T')[0], total_pendapatan:Math.floor(Math.random()*600000)+200000, total_transaksi:Math.floor(Math.random()*7)+1 };
+const MOCK_LAP = Array.from({ length: 30 }, (_, i) => {
+  const d = new Date(); d.setDate(d.getDate() - i);
+  return { tanggal: d.toISOString().split('T')[0], total_pendapatan: Math.floor(Math.random() * 600000) + 200000, total_transaksi: Math.floor(Math.random() * 7) + 1 };
 });

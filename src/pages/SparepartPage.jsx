@@ -26,13 +26,13 @@ export default function SparepartPage() {
   const [riwayatData, setRiwayatData]       = useState([]);
   const [riwayatLoading, setRiwayatLoading] = useState(false);
   const [modalKategori, setModalKategori]   = useState(false);
-  const [categories, setCategories]         = useState([...KATEGORI_SP]);
+  const [categories, setCategories] = useState([...KATEGORI_SP].sort((a, b) => a.localeCompare(b, 'id')));
 
   useEffect(() => {
     loadData();
     api.invoke('settings:get').then(s => {
       if (s?.kategori_sp) {
-        try { setCategories(JSON.parse(s.kategori_sp)); }
+        try { setCategories(JSON.parse(s.kategori_sp).sort((a, b) => a.localeCompare(b, 'id'))); }
         catch { setCategories([...KATEGORI_SP]); }
       }
     });
@@ -46,7 +46,7 @@ export default function SparepartPage() {
   }
 
   async function saveCategories(cats) {
-    setCategories(cats);
+  setCategories([...cats].sort((a, b) => a.localeCompare(b, 'id')));
     await api.invoke('settings:set', { key: 'kategori_sp', value: JSON.stringify(cats) });
     showToast('Kategori berhasil disimpan!');
   }
@@ -428,28 +428,69 @@ function StokMasukModal({ open, sparepart, onClose, onSaved }) {
 }
 
 // ─── Kelola Kategori Modal ────────────────────────────────────────────────────
+// GANTI seluruh function KategoriModal yang lama dengan ini
 function KategoriModal({ open, categories, onClose, onSave }) {
-  const [list, setList]     = useState([]);
-  const [newKat, setNewKat] = useState('');
-  const [error, setError]   = useState('');
+  const [list, setList]       = useState([]);
+  const [newKat, setNewKat]   = useState('');
+  const [error, setError]     = useState('');
+  const [editIdx, setEditIdx] = useState(null); // index item yang sedang diedit
+  const [editVal, setEditVal] = useState('');
 
   useEffect(() => {
-    if (open) { setList([...categories]); setNewKat(''); setError(''); }
+    if (open) {
+      setList([...categories].sort((a, b) => a.localeCompare(b, 'id')));
+      setNewKat('');
+      setError('');
+      setEditIdx(null);
+      setEditVal('');
+    }
   }, [open, categories]);
 
+  // ── Tambah ──────────────────────────────────────────────────────────────────
   function handleAdd() {
     const val = newKat.trim();
     if (!val) return setError('Nama kategori tidak boleh kosong');
-    if (list.map(k => k.toLowerCase()).includes(val.toLowerCase())) return setError('Kategori sudah ada');
-    setList(prev => [...prev, val]);
+    if (list.map(k => k.toLowerCase()).includes(val.toLowerCase()))
+      return setError('Kategori sudah ada');
+    setList(prev => [...prev, val].sort((a, b) => a.localeCompare(b, 'id')));
     setNewKat('');
     setError('');
   }
 
-  function handleDelete(kat) {
-    setList(prev => prev.filter(k => k !== kat));
+  // ── Edit ────────────────────────────────────────────────────────────────────
+  function startEdit(idx) {
+    setEditIdx(idx);
+    setEditVal(list[idx]);
+    setError('');
   }
 
+  function cancelEdit() {
+    setEditIdx(null);
+    setEditVal('');
+    setError('');
+  }
+
+  function confirmEdit() {
+    const val = editVal.trim();
+    if (!val) return setError('Nama tidak boleh kosong');
+    if (list.some((k, i) => i !== editIdx && k.toLowerCase() === val.toLowerCase()))
+      return setError('Nama kategori sudah ada');
+    setList(prev =>
+      prev.map((k, i) => i === editIdx ? val : k)
+          .sort((a, b) => a.localeCompare(b, 'id'))
+    );
+    setEditIdx(null);
+    setEditVal('');
+    setError('');
+  }
+
+  // ── Hapus ───────────────────────────────────────────────────────────────────
+  function handleDelete(kat) {
+    setList(prev => prev.filter(k => k !== kat));
+    if (editIdx !== null) { setEditIdx(null); setEditVal(''); }
+  }
+
+  // ── Simpan ──────────────────────────────────────────────────────────────────
   function handleSave() {
     if (list.length === 0) return setError('Minimal harus ada 1 kategori');
     onSave(list);
@@ -460,14 +501,15 @@ function KategoriModal({ open, categories, onClose, onSave }) {
     <Modal
       open={open} onClose={onClose}
       title="Kelola Kategori Sparepart"
-      subtitle="Tambah atau hapus kategori"
+      subtitle="Tersimpan otomatis urut A–Z"
       width={420}
       footer={<>
         <Button variant="ghost" onClick={onClose}>Batal</Button>
         <Button icon={<CheckCircle size={13} />} onClick={handleSave}>Simpan</Button>
       </>}
     >
-      <div style={{ display: 'flex', gap: 8, marginBottom: error ? 8 : 16 }}>
+      {/* Form tambah */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: error ? 6 : 14 }}>
         <input
           value={newKat}
           onChange={e => { setNewKat(e.target.value); setError(''); }}
@@ -475,23 +517,24 @@ function KategoriModal({ open, categories, onClose, onSave }) {
           placeholder="Nama kategori baru..."
           style={{
             flex: 1, background: 'var(--surface2)',
-            border: `1.5px solid ${error ? 'var(--red)' : 'var(--border)'}`,
+            border: `1.5px solid ${error && editIdx === null ? 'var(--red)' : 'var(--border)'}`,
             borderRadius: 8, padding: '8px 11px', fontSize: 13,
             fontFamily: "'Plus Jakarta Sans', sans-serif",
-            color: 'var(--text)', outline: 'none',
+            color: 'var(--text)', outline: 'none', transition: 'all 0.12s',
           }}
           onFocus={e => { e.target.style.borderColor = 'var(--accent)'; e.target.style.boxShadow = '0 0 0 3px rgba(232,93,4,0.08)'; }}
-          onBlur={e => { e.target.style.borderColor = error ? 'var(--red)' : 'var(--border)'; e.target.style.boxShadow = 'none'; }}
+          onBlur={e => { e.target.style.borderColor = 'var(--border)'; e.target.style.boxShadow = 'none'; }}
         />
         <Button icon={<Plus size={13} />} onClick={handleAdd}>Tambah</Button>
       </div>
 
       {error && (
-        <div style={{ fontSize: 12, color: 'var(--red)', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
+        <div style={{ fontSize: 12, color: 'var(--red)', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 4 }}>
           <XCircle size={11} /> {error}
         </div>
       )}
 
+      {/* List kategori */}
       <div style={{ border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
         {list.length === 0 ? (
           <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>
@@ -499,36 +542,113 @@ function KategoriModal({ open, categories, onClose, onSave }) {
           </div>
         ) : list.map((kat, i) => (
           <div
-            key={kat}
+            key={kat + i}
             style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              padding: '10px 14px',
+              display: 'flex', alignItems: 'center', gap: 8,
+              padding: '9px 12px',
               borderBottom: i < list.length - 1 ? '1px solid var(--border)' : 'none',
-              background: 'var(--surface)', transition: 'background 0.1s',
+              background: editIdx === i ? 'var(--accent-light)' : 'var(--surface)',
+              transition: 'background 0.1s',
             }}
-            onMouseEnter={e => e.currentTarget.style.background = 'var(--surface2)'}
-            onMouseLeave={e => e.currentTarget.style.background = 'var(--surface)'}
+            onMouseEnter={e => { if (editIdx !== i) e.currentTarget.style.background = 'var(--surface2)'; }}
+            onMouseLeave={e => { if (editIdx !== i) e.currentTarget.style.background = 'var(--surface)'; }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Droplets size={13} color="var(--blue)" />
-              <span style={{ fontSize: 13, fontWeight: 500 }}>{kat}</span>
+            <Droplets size={13} color={editIdx === i ? 'var(--accent)' : 'var(--blue)'} style={{ flexShrink: 0 }} />
+
+            {/* Nama atau input edit inline */}
+            {editIdx === i ? (
+              <input
+                autoFocus
+                value={editVal}
+                onChange={e => { setEditVal(e.target.value); setError(''); }}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') confirmEdit();
+                  if (e.key === 'Escape') cancelEdit();
+                }}
+                style={{
+                  flex: 1, background: 'white',
+                  border: '1.5px solid var(--accent)',
+                  borderRadius: 6, padding: '4px 8px', fontSize: 13,
+                  fontFamily: "'Plus Jakarta Sans', sans-serif",
+                  color: 'var(--text)', outline: 'none',
+                  boxShadow: '0 0 0 3px rgba(232,93,4,0.08)',
+                }}
+              />
+            ) : (
+              <span style={{ flex: 1, fontSize: 13, fontWeight: 500 }}>{kat}</span>
+            )}
+
+            {/* Tombol aksi */}
+            <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+              {editIdx === i ? (
+                <>
+                  {/* Konfirmasi edit — pakai CheckCircle yg sudah diimport */}
+                  <button
+                    onClick={confirmEdit}
+                    title="Simpan perubahan (Enter)"
+                    style={{
+                      background: 'var(--green-bg)', border: '1px solid rgba(5,150,105,0.25)',
+                      cursor: 'pointer', padding: '4px 8px', borderRadius: 6,
+                      display: 'flex', alignItems: 'center', color: 'var(--green)',
+                    }}
+                  >
+                    <CheckCircle size={13} />
+                  </button>
+                  {/* Batal edit — pakai XCircle yg sudah diimport */}
+                  <button
+                    onClick={cancelEdit}
+                    title="Batal (Escape)"
+                    style={{
+                      background: 'var(--surface2)', border: '1px solid var(--border)',
+                      cursor: 'pointer', padding: '4px 8px', borderRadius: 6,
+                      display: 'flex', alignItems: 'center', color: 'var(--text3)',
+                    }}
+                  >
+                    <XCircle size={13} />
+                  </button>
+                </>
+              ) : (
+                <>
+                  {/* Tombol edit — pakai Edit2 yg sudah diimport */}
+                  <button
+                    onClick={() => startEdit(i)}
+                    title="Edit nama kategori"
+                    style={{
+                      background: 'none', border: 'none', cursor: 'pointer',
+                      padding: '4px 7px', borderRadius: 6,
+                      display: 'flex', alignItems: 'center', color: 'var(--text3)',
+                      transition: 'all 0.12s',
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.background = 'var(--blue-bg)'; e.currentTarget.style.color = 'var(--blue)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = 'var(--text3)'; }}
+                  >
+                    <Edit2 size={13} />
+                  </button>
+                  {/* Tombol hapus */}
+                  <button
+                    onClick={() => handleDelete(kat)}
+                    title="Hapus kategori"
+                    style={{
+                      background: 'none', border: 'none', cursor: 'pointer',
+                      padding: '4px 7px', borderRadius: 6,
+                      display: 'flex', alignItems: 'center', color: 'var(--text3)',
+                      transition: 'all 0.12s',
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.background = 'var(--red-bg)'; e.currentTarget.style.color = 'var(--red)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = 'var(--text3)'; }}
+                  >
+                    <XCircle size={14} />
+                  </button>
+                </>
+              )}
             </div>
-            <button
-              onClick={() => handleDelete(kat)}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text3)', padding: '4px 6px', borderRadius: 6, display: 'flex', alignItems: 'center', transition: 'all 0.12s' }}
-              onMouseEnter={e => { e.currentTarget.style.background = 'var(--red-bg)'; e.currentTarget.style.color = 'var(--red)'; }}
-              onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = 'var(--text3)'; }}
-              title="Hapus kategori"
-            >
-              <XCircle size={14} />
-            </button>
           </div>
         ))}
       </div>
 
       <div style={{ marginTop: 10, fontSize: 11, color: 'var(--text3)', display: 'flex', alignItems: 'center', gap: 4 }}>
         <AlertTriangle size={10} />
-        Menghapus kategori tidak menghapus sparepart yang sudah menggunakan kategori tersebut
+        Mengedit/menghapus kategori tidak mengubah sparepart yang sudah menggunakannya
       </div>
     </Modal>
   );
