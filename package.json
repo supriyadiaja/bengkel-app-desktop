@@ -1,6 +1,6 @@
 {
   "name": "bengkel-maju-jaya",
-  "version": "1.0.1",
+  "version": "1.0.3",
   "description": "Aplikasi Manajemen Bengkel Motor - Desktop App",
   "main": "electron/main.js",
   "author": "Dua Putra Jaya Motor",
@@ -10,6 +10,7 @@
     "react-start": "react-scripts start",
     "react-build": "react-scripts build",
     "build": "npm run react-build && electron-builder",
+    "publish": "npm run react-build && electron-builder --publish always",
     "electron": "electron .",
     "dev": "concurrently \"cross-env BROWSER=none react-scripts start\" \"wait-on http://localhost:3000 && nodemon --watch electron --exec electron electron/main.js\"",
     "postinstall": "electron-builder install-app-deps"

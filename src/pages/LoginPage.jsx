@@ -153,10 +153,10 @@ export default function LoginPage({ onLogin }) {
           {loading ? 'Memverifikasi...' : 'Masuk'}
         </button>
 
-        <div style={{ textAlign: 'center', marginTop: 14, fontSize: 11, color: 'var(--text3)' }}>
+        {/* <div style={{ textAlign: 'center', marginTop: 14, fontSize: 11, color: 'var(--text3)' }}>
           PIN default Admin: <strong style={{ fontFamily: 'JetBrains Mono', color: 'var(--text2)' }}>1234</strong>
           &nbsp;·&nbsp; Kasir: <strong style={{ fontFamily: 'JetBrains Mono', color: 'var(--text2)' }}>0000</strong>
-        </div>
+        </div> */}
       </div>
 
       <style>{`

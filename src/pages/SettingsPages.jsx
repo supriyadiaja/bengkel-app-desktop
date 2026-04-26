@@ -215,10 +215,15 @@ export function BengkelSettings() {
   const { showToast } = useApp();
   const [form, setForm] = useState({ nama_bengkel: '', alamat: '', telepon: '', whatsapp: '', app_version: '1.0.0' });
   const [saving, setSaving] = useState(false);
-  const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
-    api.invoke('settings:get').then(s => { if (s && Object.keys(s).length) setForm(prev => ({ ...prev, ...s })); });
+    api.invoke('settings:get').then(s => {
+      if (s && Object.keys(s).length) setForm(prev => ({ ...prev, ...s }));
+    });
+    // Ambil versi dari Electron
+    api.invoke('app:getVersion').then(v => {
+      if (v) setForm(prev => ({ ...prev, app_version: v }));
+    });
   }, []);
 
   const set = k => e => setForm(f => ({ ...f, [k]: e.target.value }));

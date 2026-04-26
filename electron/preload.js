@@ -18,6 +18,7 @@ const INVOKE_CHANNELS = [
   'ai:generateInsights', 'ai:generatePrediksi', 'ai:chat',
   'backup:status', 'backup:getAuthUrl', 'backup:saveToken',
   'backup:runNow', 'backup:toggleScheduler', 'backup:disconnect',
+  'app:getVersion',
 ];
 
 const SEND_CHANNELS = [

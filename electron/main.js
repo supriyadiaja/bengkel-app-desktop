@@ -700,6 +700,11 @@ Data bengkel: ${JSON.stringify(context)}`,
   }
 });
 
+
+ipcMain.handle('app:getVersion', () => {
+  return app.getVersion();
+});
+
 // ─── IPC: Google Drive Backup ─────────────────────────────────────────────────
 ipcMain.handle('backup:status', () => {
   try {
