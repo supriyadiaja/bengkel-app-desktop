@@ -8,11 +8,6 @@ export default function LoginPage({ onLogin }) {
   const [loading, setLoading] = useState(false);
   const [shake, setShake] = useState(false);
 
-  const handleKey = (k) => {
-    if (pin.length >= 6) return;
-    setPin(p => p + k);
-  };
-
   const handleDel = () => setPin(p => p.slice(0, -1));
   const handleClear = () => setPin('');
 
@@ -24,8 +19,12 @@ export default function LoginPage({ onLogin }) {
       const api = window.api || mockApi;
       const res = await api.invoke('auth:login', { pin: p });
       if (res.success) {
-        onLogin(res.user);
-        if (window.api) window.api.send('auth:openMain');
+        if (window.api) {
+          window.api.send('auth:openMain'); // resize window dulu
+          setTimeout(() => onLogin(res.user), 150); // baru render main app
+        } else {
+          onLogin(res.user); // browser dev mode, langsung
+        }
       } else {
         setShake(true);
         setPin('');

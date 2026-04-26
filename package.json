@@ -1,16 +1,18 @@
 {
   "name": "bengkel-maju-jaya",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Aplikasi Manajemen Bengkel Motor - Desktop App",
   "main": "electron/main.js",
-  "homepage": "./",
+  "author": "Dua Putra Jaya Motor",
+  "homepage": ".",
   "scripts": {
     "start": "concurrently \"npm run react-start\" \"wait-on http://localhost:3000 && electron .\"",
     "react-start": "react-scripts start",
     "react-build": "react-scripts build",
     "build": "npm run react-build && electron-builder",
     "electron": "electron .",
-    "dev": "concurrently \"cross-env BROWSER=none react-scripts start\" \"wait-on http://localhost:3000 && nodemon --watch electron --exec electron electron/main.js\""
+    "dev": "concurrently \"cross-env BROWSER=none react-scripts start\" \"wait-on http://localhost:3000 && nodemon --watch electron --exec electron electron/main.js\"",
+    "postinstall": "electron-builder install-app-deps"
   },
   "dependencies": {
     "@serialport/bindings-cpp": "^12.0.1",
@@ -41,36 +43,63 @@
   },
   "build": {
     "appId": "com.bengkelmaujaya.app",
+    "productName": "Dua Putra Jaya Motor",
+    "extends": null,
+    "extraMetadata": {
+      "main": "electron/main.js"
+    },
     "publish": {
       "provider": "github",
       "owner": "supriyadiaja",
       "repo": "bengkel-app-desktop"
     },
-    "productName": "Dua Putra Jaya Motor",
     "directories": {
-      "output": "dist"
+      "output": "dist",
+      "buildResources": "public"
     },
+    "files": [
+      "build/**/*",
+      "electron/**/*",
+      "node_modules/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "electron/",
+        "to": "electron/"
+      },
+      {
+        "from": "build/",
+        "to": "build/"
+      }
+    ],
+    "asar": true,
+    "asarUnpack": [
+      "node_modules/better-sqlite3/**/*",
+      "node_modules/@serialport/**/*",
+      "node_modules/serialport/**/*",
+      "node_modules/node-thermal-printer/**/*"
+    ],
     "win": {
-      "target": "nsis",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
       "icon": "public/icon.ico"
     },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
-      "createStartMenuShortcut": true
-    },
-    "files": [
-      "build/**/*",
-      "electron/**/*",
-      "node_modules/**/*"
-    ],
-    "extraResources": [
-      {
-        "from": "electron/",
-        "to": "electron/"
-      }
-    ]
+      "createStartMenuShortcut": true,
+      "shortcutName": "Dua Putra Jaya Motor",
+      "installerIcon": "public/icon.ico",
+      "uninstallerIcon": "public/icon.ico"
+    }
   },
   "eslintConfig": {
     "extends": [

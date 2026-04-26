@@ -8,14 +8,41 @@ require('dotenv').config({ path: '.env.local' });
 const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
-const isDev = process.env.NODE_ENV !== 'production';
-const { autoUpdater } = require('electron-updater');
+const isDev = !app.isPackaged;
 
-const { isAuthenticated, getAuthUrl, saveToken, uploadBackup, disconnectGoogle } = require('./backup');
-const { startScheduler, stopScheduler, isSchedulerRunning } = require('./scheduler');
+let autoUpdater;
+try {
+  autoUpdater = require('electron-updater').autoUpdater;
+} catch (e) {
+  console.log('electron-updater not available:', e.message);
+}
+
+let backup, scheduler;
+try {
+  backup = require('./backup');
+  scheduler = require('./scheduler');
+} catch (e) {
+  console.log('backup/scheduler modules not available:', e.message);
+  backup = {
+    isAuthenticated: () => false,
+    getAuthUrl: () => '',
+    saveToken: async () => { },
+    uploadBackup: async () => ({ success: false, message: 'Not configured' }),
+    disconnectGoogle: () => ({ success: true }),
+  };
+  scheduler = {
+    startScheduler: () => { },
+    stopScheduler: () => { },
+    isSchedulerRunning: () => false,
+  };
+}
+
+const { isAuthenticated, getAuthUrl, saveToken, uploadBackup, disconnectGoogle } = backup;
+const { startScheduler, stopScheduler, isSchedulerRunning } = scheduler;
 
 // ─── Database Setup ───────────────────────────────────────────────────────────
 let db;
+
 function initDatabase() {
   const Database = require('better-sqlite3');
   const userDataPath = app.getPath('userData');
@@ -24,11 +51,9 @@ function initDatabase() {
   console.log('Database path:', dbPath);
   db = new Database(dbPath);
 
-  // Enable WAL mode for better performance
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
 
-  // Create tables from schema
   const schemaPath = isDev
     ? path.join(__dirname, 'schema.sql')
     : path.join(process.resourcesPath, 'electron', 'schema.sql');
@@ -36,52 +61,24 @@ function initDatabase() {
   const schema = fs.readFileSync(schemaPath, 'utf8');
   db.exec(schema);
 
-  // Seed default admin if not exists
   const adminExists = db.prepare("SELECT id FROM users WHERE role = 'admin' LIMIT 1").get();
   if (!adminExists) {
-    db.prepare(`
-      INSERT INTO users (nama, role, pin) VALUES (?, ?, ?)
-    `).run('Administrator', 'admin', '1234'); // Default PIN: 1234
-    db.prepare(`
-      INSERT INTO users (nama, role, pin) VALUES (?, ?, ?)
-    `).run('Kasir', 'kasir', '0000');
+    db.prepare('INSERT INTO users (nama, role, pin) VALUES (?, ?, ?)').run('Administrator', 'admin', '1234');
+    db.prepare('INSERT INTO users (nama, role, pin) VALUES (?, ?, ?)').run('Kasir', 'kasir', '0000');
   }
 
   console.log('✅ Database initialized');
 }
 
 // ─── Window Management ────────────────────────────────────────────────────────
-let mainWindow;
-let loginWindow;
+let mainWindow = null;
 
-function createLoginWindow() {
-  loginWindow = new BrowserWindow({
+function createWindow() {
+  mainWindow = new BrowserWindow({
     width: 420,
-    height: 560,
+    height: 580,
     resizable: false,
     frame: false,
-    transparent: false,
-    webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
-      contextIsolation: true,
-      nodeIntegration: false,
-    },
-    icon: path.join(__dirname, '../public/icon.ico'),
-  });
-
-  const startURL = isDev
-    ? 'http://localhost:3000/#/login'
-    : `file://${path.join(__dirname, '../build/index.html')}#/login`;
-
-  loginWindow.loadURL(startURL);
-}
-
-function createMainWindow() {
-  mainWindow = new BrowserWindow({
-    width: 1280,
-    height: 800,
-    minWidth: 1024,
-    minHeight: 680,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -91,43 +88,51 @@ function createMainWindow() {
     show: false,
   });
 
-  const startURL = isDev
-    ? 'http://localhost:3000'
-    : `file://${path.join(__dirname, '../build/index.html')}`;
-
-  mainWindow.loadURL(startURL);
-  mainWindow.once('ready-to-show', () => mainWindow.show());
-
-  if (isDev) mainWindow.webContents.openDevTools({ mode: 'detach' });
-}
-
-app.whenReady().then(() => {
-  initDatabase();
-  createLoginWindow(); // Start with login
-  // createMainWindow(); // Uncomment to skip login during dev
-
-  // Mulai scheduler backup otomatis (kalau sudah login Google)
-  if (isAuthenticated()) {
-    startScheduler(mainWindow);
+  if (isDev) {
+    mainWindow.loadURL('http://localhost:3000');
+    mainWindow.webContents.openDevTools({ mode: 'detach' });
+  } else {
+    mainWindow.loadURL(`file://${path.join(process.resourcesPath, 'build/index.html')}`);
   }
 
-  // Cek update otomatis
-  autoUpdater.checkForUpdatesAndNotify();
-
-  // Notifikasi saat update siap
-  autoUpdater.on('update-downloaded', () => {
-    dialog.showMessageBox({
-      type: 'info',
-      title: 'Update Tersedia',
-      message: 'Versi baru sudah didownload. Restart untuk menginstall?',
-      buttons: ['Restart Sekarang', 'Nanti']
-    }).then(result => {
-      if (result.response === 0) autoUpdater.quitAndInstall();
-    });
+  mainWindow.once('ready-to-show', () => {
+    mainWindow.show();
+    try {
+      if (isAuthenticated()) startScheduler(mainWindow);
+    } catch (e) { }
   });
 
+  mainWindow.on('closed', () => {
+    mainWindow = null;
+    try { stopScheduler(); } catch (e) { }
+  });
+}
+
+// ─── App Ready ────────────────────────────────────────────────────────────────
+app.whenReady().then(() => {
+  initDatabase();
+  createWindow();
+
+  if (!isDev && autoUpdater) {
+    try {
+      autoUpdater.checkForUpdatesAndNotify();
+      autoUpdater.on('update-downloaded', () => {
+        dialog.showMessageBox({
+          type: 'info',
+          title: 'Update Tersedia',
+          message: 'Versi baru sudah didownload. Restart untuk menginstall?',
+          buttons: ['Restart Sekarang', 'Nanti'],
+        }).then(result => {
+          if (result.response === 0) autoUpdater.quitAndInstall();
+        });
+      });
+    } catch (e) {
+      console.log('AutoUpdater error:', e.message);
+    }
+  }
+
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createLoginWindow();
+    if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
 });
 
@@ -137,12 +142,14 @@ app.on('window-all-closed', () => {
 
 // ─── IPC: Auth ────────────────────────────────────────────────────────────────
 ipcMain.handle('auth:login', (_, { pin }) => {
-  const user = db.prepare('SELECT * FROM users WHERE pin = ? AND aktif = 1').get(pin);
-  if (!user) return { success: false, message: 'PIN salah atau akun tidak aktif' };
-
-  // Don't return PIN to renderer
-  const { pin: _pin, ...safeUser } = user;
-  return { success: true, user: safeUser };
+  try {
+    const user = db.prepare('SELECT * FROM users WHERE pin = ? AND aktif = 1').get(pin);
+    if (!user) return { success: false, message: 'PIN salah atau akun tidak aktif' };
+    const { pin: _pin, ...safeUser } = user;
+    return { success: true, user: safeUser };
+  } catch (e) {
+    return { success: false, message: e.message };
+  }
 });
 
 ipcMain.handle('auth:getUsers', () => {
@@ -158,9 +165,14 @@ ipcMain.handle('auth:addUser', (_, { nama, role, pin }) => {
   }
 });
 
+// Setelah login sukses, resize window dari login ke main
 ipcMain.on('auth:openMain', () => {
-  if (loginWindow) loginWindow.close();
-  createMainWindow();
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  mainWindow.setResizable(true);
+  mainWindow.setMinimumSize(1024, 680);
+  mainWindow.setSize(1280, 800);
+  mainWindow.center();
+  mainWindow.maximize();
 });
 
 // ─── IPC: Pelanggan ───────────────────────────────────────────────────────────
@@ -176,7 +188,7 @@ ipcMain.handle('pelanggan:getAll', () => {
 
 ipcMain.handle('pelanggan:search', (_, query) => {
   return db.prepare(`
-    SELECT * FROM pelanggan 
+    SELECT * FROM pelanggan
     WHERE nama LIKE ? OR no_plat LIKE ? OR no_telp LIKE ?
     ORDER BY nama ASC
   `).all(`%${query}%`, `%${query}%`, `%${query}%`);
@@ -197,7 +209,7 @@ ipcMain.handle('pelanggan:add', (_, data) => {
 ipcMain.handle('pelanggan:update', (_, { id, ...data }) => {
   try {
     db.prepare(`
-      UPDATE pelanggan SET nama=?, no_telp=?, jenis_motor=?, no_plat=?, tahun_motor=?, warna=?, catatan=?
+      UPDATE pelanggan SET nama=?, no_telp=?, jenis_motor=?, no_plat=?, tahun_motor=?, warna=?, catatan=?, updated_at=datetime('now','localtime')
       WHERE id=?
     `).run(data.nama, data.no_telp, data.jenis_motor, data.no_plat, data.tahun_motor, data.warna, data.catatan, id);
     return { success: true };
@@ -224,8 +236,8 @@ function generateInvoiceNo() {
   const prefix = `INV-${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}`;
 
   const last = db.prepare(`
-    SELECT no_invoice FROM invoice 
-    WHERE no_invoice LIKE ? 
+    SELECT no_invoice FROM invoice
+    WHERE no_invoice LIKE ?
     ORDER BY id DESC LIMIT 1
   `).get(`${prefix}%`);
 
@@ -237,7 +249,7 @@ function generateInvoiceNo() {
   return `${prefix}-${String(seq).padStart(3, '0')}`;
 }
 
-ipcMain.handle('invoice:getAll', (_, { limit = 50, offset = 0, status } = {}) => {
+ipcMain.handle('invoice:getAll', (_, { limit = 100, offset = 0, status } = {}) => {
   let q = `
     SELECT i.*, p.nama as nama_pelanggan, p.jenis_motor, p.no_plat
     FROM invoice i
@@ -256,7 +268,6 @@ ipcMain.handle('invoice:getById', (_, id) => {
     FROM invoice i JOIN pelanggan p ON p.id = i.pelanggan_id
     WHERE i.id = ?
   `).get(id);
-
   if (!inv) return null;
   inv.items = db.prepare('SELECT * FROM invoice_item WHERE invoice_id = ?').all(id);
   return inv;
@@ -281,10 +292,8 @@ ipcMain.handle('invoice:create', (_, { pelangganId, odometer, keluhan, mekanik, 
         VALUES (?, ?, ?, ?, ?, ?)
       `).run(invoiceId, item.nama_item, item.qty, item.satuan, item.harga, item.qty * item.harga);
 
-      // Kurangi stok jika bukan jasa
       if (item.satuan !== 'Jasa' && item.sparepart_id) {
         db.prepare('UPDATE sparepart SET stok = stok - ? WHERE id = ?').run(item.qty, item.sparepart_id);
-        // Catat mutasi stok
         db.prepare(`
           INSERT INTO stok_mutasi (sparepart_id, tipe, qty, keterangan, ref_id)
           VALUES (?, 'keluar', ?, ?, ?)
@@ -292,13 +301,12 @@ ipcMain.handle('invoice:create', (_, { pelangganId, odometer, keluhan, mekanik, 
       }
     }
 
-    // Catat ke laporan harian
     const today = new Date().toISOString().split('T')[0];
     const existing = db.prepare('SELECT id FROM laporan_harian WHERE tanggal = ?').get(today);
     if (existing) {
       db.prepare(`
-        UPDATE laporan_harian SET total_pendapatan = total_pendapatan + ?, total_transaksi = total_transaksi + 1
-        WHERE tanggal = ?
+        UPDATE laporan_harian SET total_pendapatan = total_pendapatan + ?, total_transaksi = total_transaksi + 1,
+        updated_at = datetime('now','localtime') WHERE tanggal = ?
       `).run(total, today);
     } else {
       db.prepare(`
@@ -317,8 +325,12 @@ ipcMain.handle('invoice:create', (_, { pelangganId, odometer, keluhan, mekanik, 
 });
 
 ipcMain.handle('invoice:updateStatus', (_, { id, status }) => {
-  db.prepare('UPDATE invoice SET status = ? WHERE id = ?').run(status, id);
-  return { success: true };
+  try {
+    db.prepare('UPDATE invoice SET status = ? WHERE id = ?').run(status, id);
+    return { success: true };
+  } catch (e) {
+    return { success: false, message: e.message };
+  }
 });
 
 // ─── IPC: Sparepart ───────────────────────────────────────────────────────────
@@ -342,6 +354,18 @@ ipcMain.handle('sparepart:add', (_, data) => {
   }
 });
 
+ipcMain.handle('sparepart:update', (_, { id, ...data }) => {
+  try {
+    db.prepare(`
+      UPDATE sparepart SET nama=?, kategori=?, stok_minimum=?, harga_beli=?, harga_jual=?, satuan=?, updated_at=datetime('now','localtime')
+      WHERE id=?
+    `).run(data.nama, data.kategori, data.stok_minimum, data.harga_beli, data.harga_jual, data.satuan, id);
+    return { success: true };
+  } catch (e) {
+    return { success: false, message: e.message };
+  }
+});
+
 ipcMain.handle('sparepart:stokMasuk', (_, { id, qty, keterangan }) => {
   try {
     db.prepare('UPDATE sparepart SET stok = stok + ? WHERE id = ?').run(qty, id);
@@ -356,13 +380,13 @@ ipcMain.handle('sparepart:stokMasuk', (_, { id, qty, keterangan }) => {
 
 ipcMain.handle('sparepart:getMutasi', (_, sparepartId) => {
   return db.prepare(`
-    SELECT * FROM stok_mutasi WHERE sparepart_id = ? ORDER BY created_at DESC LIMIT 50
+    SELECT * FROM stok_mutasi WHERE sparepart_id = ? ORDER BY created_at DESC LIMIT 100
   `).all(sparepartId);
 });
 
 ipcMain.handle('stok:getAllMutasi', () => {
   return db.prepare(`
-    SELECT 
+    SELECT
       sm.*,
       sp.kode     AS kode_sparepart,
       sp.nama     AS nama_sparepart,
@@ -374,10 +398,207 @@ ipcMain.handle('stok:getAllMutasi', () => {
   `).all();
 });
 
-// ─── IPC: Groq AI ─────────────────────────────────────────────────────────────
+// ─── IPC: Laporan ─────────────────────────────────────────────────────────────
+ipcMain.handle('laporan:harian', (_, { dari, sampai }) => {
+  return db.prepare(`
+    SELECT * FROM laporan_harian
+    WHERE tanggal BETWEEN ? AND ?
+    ORDER BY tanggal DESC
+  `).all(dari, sampai);
+});
+
+ipcMain.handle('laporan:bulanan', (_, { tahun, bulan }) => {
+  const dari = `${tahun}-${String(bulan).padStart(2, '0')}-01`;
+  const sampai = `${tahun}-${String(bulan).padStart(2, '0')}-31`;
+
+  const summary = db.prepare(`
+    SELECT
+      SUM(total)  as total_pendapatan,
+      COUNT(*)    as total_transaksi,
+      AVG(total)  as rata_rata
+    FROM invoice
+    WHERE tanggal BETWEEN ? AND ? AND status = 'Lunas'
+  `).get(dari, sampai);
+
+  const perKategori = db.prepare(`
+    SELECT
+      CASE WHEN ii.satuan = 'Jasa' THEN 'Jasa Servis' ELSE 'Sparepart' END as kategori,
+      SUM(ii.subtotal) as total
+    FROM invoice_item ii
+    JOIN invoice i ON i.id = ii.invoice_id
+    WHERE i.tanggal BETWEEN ? AND ? AND i.status = 'Lunas'
+    GROUP BY kategori
+  `).all(dari, sampai);
+
+  return { summary, perKategori };
+});
+
+// ─── IPC: Pengaturan ──────────────────────────────────────────────────────────
+ipcMain.handle('settings:get', () => {
+  return db.prepare('SELECT * FROM pengaturan').all()
+    .reduce((acc, row) => { acc[row.key] = row.value; return acc; }, {});
+});
+
+ipcMain.handle('settings:set', (_, { key, value }) => {
+  try {
+    db.prepare('INSERT OR REPLACE INTO pengaturan (key, value) VALUES (?, ?)').run(key, value);
+    return { success: true };
+  } catch (e) {
+    return { success: false, message: e.message };
+  }
+});
+
+// ─── IPC: Thermal Printer ─────────────────────────────────────────────────────
+ipcMain.handle('printer:getPorts', async () => {
+  try {
+    const { SerialPort } = require('serialport');
+    const ports = await SerialPort.list();
+    return ports.map(p => ({ path: p.path, manufacturer: p.manufacturer }));
+  } catch (e) {
+    return [];
+  }
+});
+
+ipcMain.handle('printer:test', async (_, { type, interface: iface, host, port: printerPort, serialPath }) => {
+  try {
+    const { ThermalPrinter, PrinterTypes, CharacterSet } = require('node-thermal-printer');
+
+    const printerConfig = {
+      type: PrinterTypes.EPSON,
+      characterSet: CharacterSet.PC852_LATIN2,
+      removeSpecialCharacters: false,
+    };
+
+    if (type === 'network') {
+      printerConfig.interface = `tcp://${host}:${printerPort || 9100}`;
+    } else if (type === 'serial') {
+      printerConfig.interface = serialPath;
+    } else {
+      printerConfig.interface = `printer:${iface}`;
+    }
+
+    const printer = new ThermalPrinter(printerConfig);
+    const isConnected = await printer.isPrinterConnected();
+    if (!isConnected) return { success: false, message: 'Printer tidak terhubung' };
+
+    printer.alignCenter();
+    printer.println('=== TEST PRINT ===');
+    printer.println('Dua Putra Jaya Motor');
+    printer.println('Printer terhubung!');
+    printer.cut();
+    await printer.execute();
+
+    return { success: true };
+  } catch (e) {
+    return { success: false, message: e.message };
+  }
+});
+
+ipcMain.handle('printer:printInvoice', async (_, invoiceId) => {
+  try {
+    const { ThermalPrinter, PrinterTypes, CharacterSet } = require('node-thermal-printer');
+
+    const settings = db.prepare('SELECT * FROM pengaturan').all()
+      .reduce((acc, row) => { acc[row.key] = row.value; return acc; }, {});
+
+    const inv = db.prepare(`
+      SELECT i.*, p.nama as nama_pelanggan, p.no_telp, p.jenis_motor, p.no_plat
+      FROM invoice i JOIN pelanggan p ON p.id = i.pelanggan_id
+      WHERE i.id = ?
+    `).get(invoiceId);
+
+    if (!inv) return { success: false, message: 'Invoice tidak ditemukan' };
+    inv.items = db.prepare('SELECT * FROM invoice_item WHERE invoice_id = ?').all(invoiceId);
+
+    const printer = new ThermalPrinter({
+      type: PrinterTypes.EPSON,
+      interface: settings.printer_interface || 'printer:POS-80',
+      characterSet: CharacterSet.PC852_LATIN2,
+      removeSpecialCharacters: false,
+      width: settings.printer_lebar === '58' ? 32 : 48,
+    });
+
+    const isConnected = await printer.isPrinterConnected();
+    if (!isConnected) return { success: false, message: 'Printer tidak terhubung. Cek pengaturan printer.' };
+
+    const width = settings.printer_lebar === '58' ? 32 : 48;
+    const shopName = settings.nama_bengkel || 'Dua Putra Jaya Motor';
+    const shopAddr = settings.alamat || '';
+    const shopPhone = settings.telepon || '';
+    const shopWa = settings.whatsapp || '';
+    const garansi = settings.garansi || '3 hari / 500 km';
+    const footer = settings.footer_struk || 'Terima kasih atas kunjungan Anda!';
+    const LINE = '-'.repeat(width);
+    const DASH = '- '.repeat(width / 2);
+
+    printer.alignCenter();
+    printer.bold(true);
+    printer.setTextSize(1, 1);
+    printer.println(shopName);
+    printer.setTextNormal();
+    printer.bold(false);
+    if (shopAddr) printer.println(shopAddr);
+    if (shopPhone) printer.println(`Telp: ${shopPhone}`);
+    if (shopWa) printer.println(`WA: ${shopWa}`);
+    printer.println(LINE);
+
+    printer.alignLeft();
+    printer.println(`No  : ${inv.no_invoice}`);
+    printer.println(`Tgl : ${new Date(inv.tanggal || inv.created_at).toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit', year: 'numeric' })} ${new Date(inv.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}`);
+    printer.println(`Plg : ${inv.nama_pelanggan}`);
+    if (inv.no_telp) printer.println(`WA  : ${inv.no_telp}`);
+    printer.println(`Mtr : ${inv.jenis_motor} / ${inv.no_plat}`);
+    if (inv.odometer_masuk) printer.println(`KM  : ${inv.odometer_masuk}`);
+    if (inv.mekanik) printer.println(`Mek : ${inv.mekanik}`);
+    if (inv.keluhan) printer.println(`Kel : ${inv.keluhan}`);
+    printer.println(DASH);
+
+    for (const item of inv.items) {
+      const nama = item.nama_item.length > width - 4 ? item.nama_item.substring(0, width - 4) : item.nama_item;
+      printer.println(nama);
+      const qtyHarga = `  ${item.qty} x ${formatRupiah(item.harga)}`;
+      const sub = formatRupiah(item.subtotal);
+      const spaces = Math.max(1, width - qtyHarga.length - sub.length);
+      printer.println(qtyHarga + ' '.repeat(spaces) + sub);
+    }
+
+    printer.println(DASH);
+    printer.printLeftRight('Subtotal', formatRupiah(inv.subtotal), width);
+    if (inv.diskon > 0) printer.printLeftRight('Diskon', `-${formatRupiah(inv.diskon)}`, width);
+    printer.println(LINE);
+    printer.bold(true);
+    printer.printLeftRight('TOTAL', formatRupiah(inv.total), width);
+    printer.bold(false);
+    printer.println(LINE);
+    printer.printLeftRight(`Bayar (${inv.metode_bayar || 'Tunai'})`, formatRupiah(inv.total), width);
+    printer.printLeftRight('Kembali', 'Rp 0', width);
+    printer.println(LINE);
+
+    printer.alignCenter();
+    printer.println('');
+    printer.println(footer);
+    printer.println(`Garansi: ${garansi}`);
+    printer.println('');
+    printer.cut();
+
+    await printer.execute();
+    return { success: true };
+
+  } catch (e) {
+    console.error('Print error:', e);
+    return { success: false, message: e.message };
+  }
+});
+
+// ─── Utility ──────────────────────────────────────────────────────────────────
+function formatRupiah(n) {
+  return 'Rp ' + Number(n || 0).toLocaleString('id-ID');
+}
+
+// ─── IPC: AI (Groq) ──────────────────────────────────────────────────────────
 async function callGroq(systemPrompt, userPrompt, maxTokens = 1024) {
   const apiKey = process.env.GROQ_API_KEY;
-  if (!apiKey) return { success: false, message: 'GROQ_API_KEY tidak ditemukan di .env.local' };
+  if (!apiKey) throw new Error('GROQ_API_KEY tidak ditemukan di .env.local');
 
   const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
@@ -410,26 +631,16 @@ ipcMain.handle('ai:generateInsights', async (_, summary) => {
       `Kamu adalah konsultan bisnis bengkel motor berpengalaman di Indonesia.
 Berikan analisis praktis, spesifik, dan actionable dalam Bahasa Indonesia.
 Selalu gunakan angka nyata dari data. Response hanya JSON murni tanpa backticks.`,
-      `Analisis data bengkel ini dan berikan 5 insight bisnis paling valuable:
+      `Analisis data bengkel ini dan berikan 5 insight bisnis:
 
 ${JSON.stringify(summary, null, 2)}
 
-Balas HANYA dengan JSON array ini (tanpa teks lain):
-[
-  {
-    "tipe": "peluang" | "peringatan" | "rekomendasi" | "tren",
-    "judul": "Judul singkat",
-    "isi": "Penjelasan 2-3 kalimat dengan angka spesifik",
-    "aksi": "Satu tindakan konkret yang bisa dilakukan hari ini",
-    "dampak": "tinggi" | "sedang" | "rendah"
-  }
-]`
+Balas HANYA JSON array (tanpa teks lain):
+[{"tipe":"peluang"|"peringatan"|"rekomendasi"|"tren","judul":"...","isi":"...","aksi":"...","dampak":"tinggi"|"sedang"|"rendah"}]`
     );
-    const cleaned = text.replace(/```json|```/g, '').trim();
-    const parsed = JSON.parse(cleaned);
+    const parsed = JSON.parse(text.replace(/```json|```/g, '').trim());
     return { success: true, data: Array.isArray(parsed) ? parsed : [] };
   } catch (e) {
-    console.error('ai:generateInsights error:', e);
     return { success: false, message: e.message };
   }
 });
@@ -438,31 +649,18 @@ ipcMain.handle('ai:generatePrediksi', async (_, stokData) => {
   try {
     const text = await callGroq(
       'Kamu adalah sistem prediksi stok bengkel motor. Balas HANYA JSON murni tanpa backticks.',
-      `Analisis dan buat prediksi restock untuk sparepart ini:
+      `Buat prediksi restock untuk sparepart ini:
 ${JSON.stringify(stokData)}
 
-Hitung: hari_habis = stok / (terjual_30hari/30)
-Rekomendasikan qty_restock = terjual_30hari * 1.5
+Hitung hari_habis = stok / (terjual_30hari/30), qty_restock = terjual_30hari * 1.5
 
 Balas HANYA JSON array:
-[
-  {
-    "kode": "SP001",
-    "nama": "nama item",
-    "hari_habis": 15,
-    "prioritas": "segera" | "minggu_ini" | "bulan_ini" | "aman",
-    "qty_restock": 24,
-    "estimasi_biaya": 1320000,
-    "alasan": "penjelasan singkat"
-  }
-]
-Urutkan dari prioritas paling tinggi.`
+[{"kode":"...","nama":"...","hari_habis":0,"prioritas":"segera"|"minggu_ini"|"bulan_ini"|"aman","qty_restock":0,"estimasi_biaya":0,"alasan":"..."}]
+Urutkan dari prioritas tertinggi.`
     );
-    const cleaned = text.replace(/```json|```/g, '').trim();
-    const parsed = JSON.parse(cleaned);
+    const parsed = JSON.parse(text.replace(/```json|```/g, '').trim());
     return { success: true, data: Array.isArray(parsed) ? parsed : [] };
   } catch (e) {
-    console.error('ai:generatePrediksi error:', e);
     return { success: false, message: e.message };
   }
 });
@@ -484,10 +682,10 @@ ipcMain.handle('ai:chat', async (_, { messages, context }) => {
         messages: [
           {
             role: 'system',
-            content: `Kamu adalah konsultan bisnis bengkel motor berpengalaman. 
-Gunakan Bahasa Indonesia yang ramah namun profesional. 
+            content: `Kamu adalah konsultan bisnis bengkel motor berpengalaman.
+Gunakan Bahasa Indonesia yang ramah namun profesional.
 Berikan jawaban konkret, praktis, dan berbasis data.
-Data bengkel saat ini: ${JSON.stringify(context)}`,
+Data bengkel: ${JSON.stringify(context)}`,
           },
           ...messages,
         ],
@@ -498,277 +696,79 @@ Data bengkel saat ini: ${JSON.stringify(context)}`,
     const reply = result.choices?.[0]?.message?.content || 'Maaf, tidak bisa memproses.';
     return { success: true, data: reply };
   } catch (e) {
-    console.error('ai:chat error:', e);
     return { success: false, message: e.message };
   }
 });
-
-// ─── IPC: Laporan ─────────────────────────────────────────────────────────────
-ipcMain.handle('laporan:harian', (_, { dari, sampai }) => {
-  return db.prepare(`
-    SELECT * FROM laporan_harian 
-    WHERE tanggal BETWEEN ? AND ?
-    ORDER BY tanggal DESC
-  `).all(dari, sampai);
-});
-
-ipcMain.handle('laporan:bulanan', (_, { tahun, bulan }) => {
-  const dari = `${tahun}-${String(bulan).padStart(2, '0')}-01`;
-  const sampai = `${tahun}-${String(bulan).padStart(2, '0')}-31`;
-
-  const summary = db.prepare(`
-    SELECT 
-      SUM(total) as total_pendapatan,
-      COUNT(*) as total_transaksi,
-      AVG(total) as rata_rata
-    FROM invoice
-    WHERE tanggal BETWEEN ? AND ? AND status = 'Lunas'
-  `).get(dari, sampai);
-
-  const perKategori = db.prepare(`
-    SELECT 
-      CASE WHEN ii.satuan = 'Jasa' THEN 'Jasa Servis' ELSE 'Sparepart' END as kategori,
-      SUM(ii.subtotal) as total
-    FROM invoice_item ii
-    JOIN invoice i ON i.id = ii.invoice_id
-    WHERE i.tanggal BETWEEN ? AND ? AND i.status = 'Lunas'
-    GROUP BY kategori
-  `).all(dari, sampai);
-
-  return { summary, perKategori };
-});
-
-// ─── IPC: Pengaturan ──────────────────────────────────────────────────────────
-ipcMain.handle('settings:get', () => {
-  return db.prepare('SELECT * FROM pengaturan').all()
-    .reduce((acc, row) => { acc[row.key] = row.value; return acc; }, {});
-});
-
-ipcMain.handle('settings:set', (_, { key, value }) => {
-  db.prepare('INSERT OR REPLACE INTO pengaturan (key, value) VALUES (?, ?)').run(key, value);
-  return { success: true };
-});
-
-// ─── IPC: Thermal Printer ─────────────────────────────────────────────────────
-ipcMain.handle('printer:getPorts', async () => {
-  try {
-    const { SerialPort } = require('serialport');
-    const ports = await SerialPort.list();
-    return ports.map(p => ({ path: p.path, manufacturer: p.manufacturer }));
-  } catch (e) {
-    return [];
-  }
-});
-
-ipcMain.handle('printer:test', async (_, { type, interface: iface, host, port: printerPort, serialPath }) => {
-  try {
-    const { ThermalPrinter, PrinterTypes, CharacterSet } = require('node-thermal-printer');
-
-    const printerConfig = {
-      type: printerPort === 'EPSON' ? PrinterTypes.EPSON : PrinterTypes.STAR,
-      characterSet: CharacterSet.PC852_LATIN2,
-      removeSpecialCharacters: false,
-    };
-
-    if (type === 'network') {
-      printerConfig.interface = `tcp://${host}:${printerPort || 9100}`;
-    } else if (type === 'serial') {
-      printerConfig.interface = serialPath;
-    } else {
-      // USB/LPT - use Windows printer name
-      printerConfig.interface = `printer:${iface}`;
-    }
-
-    const printer = new ThermalPrinter(printerConfig);
-    const isConnected = await printer.isPrinterConnected();
-
-    if (!isConnected) return { success: false, message: 'Printer tidak terhubung' };
-
-    printer.alignCenter();
-    printer.println('=== TEST PRINT ===');
-    printer.println('Dua Putra Jaya Motor');
-    printer.println('Printer terhubung!');
-    printer.cut();
-    await printer.execute();
-
-    return { success: true };
-  } catch (e) {
-    return { success: false, message: e.message };
-  }
-});
-
-ipcMain.handle('printer:printInvoice', async (_, invoiceId) => {
-  try {
-    const { ThermalPrinter, PrinterTypes, CharacterSet } = require('node-thermal-printer');
-
-    // Get printer settings from DB
-    const settings = db.prepare('SELECT * FROM pengaturan').all()
-      .reduce((acc, row) => { acc[row.key] = row.value; return acc; }, {});
-
-    // Get invoice data
-    const inv = db.prepare(`
-      SELECT i.*, p.nama as nama_pelanggan, p.no_telp, p.jenis_motor, p.no_plat
-      FROM invoice i JOIN pelanggan p ON p.id = i.pelanggan_id
-      WHERE i.id = ?
-    `).get(invoiceId);
-
-    if (!inv) return { success: false, message: 'Invoice tidak ditemukan' };
-    inv.items = db.prepare('SELECT * FROM invoice_item WHERE invoice_id = ?').all(invoiceId);
-
-    // Configure printer
-    const printer = new ThermalPrinter({
-      type: PrinterTypes.EPSON,
-      interface: settings.printer_interface || 'printer:POS-80',
-      characterSet: CharacterSet.PC852_LATIN2,
-      removeSpecialCharacters: false,
-      width: 48, // 80mm paper = 48 chars
-    });
-
-    const isConnected = await printer.isPrinterConnected();
-    if (!isConnected) return { success: false, message: 'Printer tidak terhubung. Cek pengaturan printer.' };
-
-    // ─── Build Receipt ────────────────────────────────────────────────────
-    const shopName = settings.nama_bengkel || 'Dua Putra Jaya Motor';
-    const shopAddr = settings.alamat || 'Jl. Raya Bandung No. 123';
-    const shopPhone = settings.telepon || '022-1234567';
-    const LINE = '------------------------------------------------';
-    const DASH = '- - - - - - - - - - - - - - - - - - - - - - - -';
-
-    printer.alignCenter();
-    printer.setTextSize(1, 1);
-    printer.bold(true);
-    printer.println(shopName);
-    printer.bold(false);
-    printer.setTextNormal();
-    printer.println(shopAddr);
-    printer.println(`Telp: ${shopPhone}`);
-    printer.println(LINE);
-
-    printer.alignLeft();
-    printer.println(`No : ${inv.no_invoice}`);
-    printer.println(`Tgl: ${new Date(inv.tanggal || inv.created_at).toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}`);
-    printer.println(`Plg: ${inv.nama_pelanggan}`);
-    printer.println(`WA : ${inv.no_telp}`);
-    printer.println(`Mtr: ${inv.jenis_motor} / ${inv.no_plat}`);
-    if (inv.odometer_masuk) printer.println(`KM : ${inv.odometer_masuk}`);
-    if (inv.mekanik) printer.println(`Mek: ${inv.mekanik}`);
-    printer.println(DASH);
-
-    // Items
-    for (const item of inv.items) {
-      const nameLine = item.nama_item.length > 28
-        ? item.nama_item.substring(0, 28)
-        : item.nama_item;
-      printer.println(nameLine);
-
-      const qtyHarga = `  ${item.qty} x ${formatRupiah(item.harga)}`;
-      const subtotal = formatRupiah(item.subtotal);
-      const padding = 48 - qtyHarga.length - subtotal.length;
-      printer.println(qtyHarga + ' '.repeat(Math.max(1, padding)) + subtotal);
-    }
-
-    printer.println(DASH);
-
-    // Totals
-    const subtotalStr = formatRupiah(inv.subtotal);
-    const totalStr = formatRupiah(inv.total);
-    printer.printLeftRight('Subtotal', subtotalStr, 48);
-    if (inv.diskon > 0) printer.printLeftRight('Diskon', `-${formatRupiah(inv.diskon)}`, 48);
-    printer.println(LINE);
-    printer.bold(true);
-    printer.printLeftRight('TOTAL', totalStr, 48);
-    printer.bold(false);
-    printer.println(LINE);
-    printer.printLeftRight('Bayar (Tunai)', totalStr, 48);
-    printer.printLeftRight('Kembali', 'Rp 0', 48);
-    printer.println(LINE);
-
-    printer.alignCenter();
-    printer.println('');
-    printer.println('Terima kasih atas kunjungan Anda!');
-    printer.println(`Garansi servis ${settings.garansi || '3 hari / 500 km'}`);
-    printer.println('');
-    printer.cut();
-
-    await printer.execute();
-    return { success: true };
-
-  } catch (e) {
-    console.error('Print error:', e);
-    return { success: false, message: e.message };
-  }
-});
-
-// Utility: format rupiah
-function formatRupiah(n) {
-  return 'Rp ' + Number(n).toLocaleString('id-ID');
-}
-
 
 // ─── IPC: Google Drive Backup ─────────────────────────────────────────────────
-
-// Cek status koneksi Google
 ipcMain.handle('backup:status', () => {
-  return {
-    connected: isAuthenticated(),
-    schedulerRunning: isSchedulerRunning(),
-  };
+  try {
+    return {
+      connected: isAuthenticated(),
+      schedulerRunning: isSchedulerRunning(),
+    };
+  } catch (e) {
+    return { connected: false, schedulerRunning: false };
+  }
 });
 
-// Get URL untuk login Google
 ipcMain.handle('backup:getAuthUrl', () => {
-  return getAuthUrl();
+  try { return getAuthUrl(); } catch (e) { return ''; }
 });
 
-// Simpan token setelah user paste auth code
 ipcMain.handle('backup:saveToken', async (_, code) => {
   try {
     await saveToken(code);
-    // Mulai scheduler setelah berhasil login
-    startScheduler(mainWindow);
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      startScheduler(mainWindow);
+    }
     return { success: true };
   } catch (e) {
     return { success: false, message: e.message };
   }
 });
 
-// Backup manual
 ipcMain.handle('backup:runNow', async () => {
   try {
-    const result = await uploadBackup();
-    return result;
+    return await uploadBackup();
   } catch (e) {
     return { success: false, message: e.message };
   }
 });
 
-// Toggle scheduler on/off
 ipcMain.handle('backup:toggleScheduler', (_, enable) => {
-  if (enable) {
-    startScheduler(mainWindow);
-  } else {
-    stopScheduler();
+  try {
+    if (enable && mainWindow && !mainWindow.isDestroyed()) {
+      startScheduler(mainWindow);
+    } else {
+      stopScheduler();
+    }
+    return { success: true, running: isSchedulerRunning() };
+  } catch (e) {
+    return { success: false, message: e.message };
   }
-  return { success: true, running: isSchedulerRunning() };
 });
 
-// Disconnect Google Drive
 ipcMain.handle('backup:disconnect', () => {
-  stopScheduler();
-  return disconnectGoogle();
+  try {
+    stopScheduler();
+    return disconnectGoogle();
+  } catch (e) {
+    return { success: false, message: e.message };
+  }
 });
-
 
 // ─── IPC: Window Controls (frameless) ────────────────────────────────────────
 ipcMain.on('window:minimize', () => {
-  const win = BrowserWindow.getFocusedWindow();
-  if (win) win.minimize();
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.minimize();
 });
+
 ipcMain.on('window:maximize', () => {
-  const win = BrowserWindow.getFocusedWindow();
-  if (win) win.isMaximized() ? win.unmaximize() : win.maximize();
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.isMaximized() ? mainWindow.unmaximize() : mainWindow.maximize();
+  }
 });
+
 ipcMain.on('window:close', () => {
-  const win = BrowserWindow.getFocusedWindow();
-  if (win) win.close();
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.close();
 });

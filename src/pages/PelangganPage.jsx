@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Users, Plus, Edit2, FileText, Phone, Bike, Hash, Star } from 'lucide-react';
-import { Card, CardHeader, Button, Badge, Table, Modal, FormGrid, FormField, Input, Textarea, SearchInput } from '../components/UI';
+import { Users, Plus, Edit2, FileText, Phone, Bike, Hash, Star, CheckCircle } from 'lucide-react';
+import { Card, CardHeader, Button, Badge, Table, Modal, FormGrid, FormField, Input, Textarea, SearchInput  } from '../components/UI';
 import { formatDate } from '../utils/format';
 import { useApp } from '../context/AppContext';
 
@@ -196,8 +196,6 @@ function PelangganModal({ open, editData, onClose, onSaved }) {
     </Modal>
   );
 }
-
-import { CheckCircle } from 'lucide-react';
 
 async function mockInvoke(ch, arg) {
   if (ch === 'pelanggan:getAll') return MOCK;
