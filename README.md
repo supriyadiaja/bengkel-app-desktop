@@ -178,3 +178,9 @@ Untuk update manual:
 
 *Dibuat untuk Dua Putra Jaya Motor, Bandung*
 *Stack: Electron 29 + React 18 + SQLite (better-sqlite3) + node-thermal-printer*
+
+1. Naikkan versi di package.json
+2. Buka terminal
+3. set GH_TOKEN=token_kamu && npm run build
+4. Tunggu proses selesai
+5. Cek GitHub Releases → file .exe sudah terupload ✅

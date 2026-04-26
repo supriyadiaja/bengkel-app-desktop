@@ -4,7 +4,7 @@
  * Never expose 'require' or 'remote' to renderer!
  */
 
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, shell } = require('electron');
 
 // Whitelist of valid channels
 const INVOKE_CHANNELS = [
@@ -16,6 +16,8 @@ const INVOKE_CHANNELS = [
   'settings:get', 'settings:set',
   'printer:getPorts', 'printer:test', 'printer:printInvoice',
   'ai:generateInsights', 'ai:generatePrediksi', 'ai:chat',
+  'backup:status', 'backup:getAuthUrl', 'backup:saveToken',
+  'backup:runNow', 'backup:toggleScheduler', 'backup:disconnect',
 ];
 
 const SEND_CHANNELS = [
@@ -31,6 +33,14 @@ contextBridge.exposeInMainWorld('api', {
     }
     return Promise.reject(new Error(`Channel not allowed: ${channel}`));
   },
+  on: (channel, callback) => {
+    const validChannels = ['backup:success', 'backup:error'];
+    if (validChannels.includes(channel)) {
+      ipcRenderer.on(channel, (_, data) => callback(data));
+    }
+  },
+  openExternal: (url) => shell.openExternal(url),
+
   // One-way IPC (fire and forget)
   send: (channel, ...args) => {
     if (SEND_CHANNELS.includes(channel)) {

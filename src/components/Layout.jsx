@@ -69,8 +69,8 @@ export default function Layout({ page, setPage, currentUser, onLogout, children,
             <Wrench size={18} color="white" strokeWidth={2.5} />
           </div>
           <div>
-            <div style={{ fontSize: 13.5, fontWeight: 800, lineHeight: 1.15, letterSpacing: '-0.2px' }}>Bengkel Maju Jaya</div>
-            <div style={{ fontSize: 9.5, color: 'var(--text3)', fontFamily: "'JetBrains Mono',monospace", marginTop: 2 }}>v1.0 · BANDUNG</div>
+            <div style={{ fontSize: 13.5, fontWeight: 800, lineHeight: 1.15, letterSpacing: '-0.2px' }}>Dua Putra Jaya Motor</div>
+            <div style={{ fontSize: 9.5, color: 'var(--text3)', fontFamily: "'JetBrains Mono',monospace", marginTop: 2 }}>v1.0 · GARUT</div>
           </div>
         </div>
 

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Printer, Store, Shield, CheckCircle, Plus, Usb, Wifi, TestTube2, Save, Eye, EyeOff, Info } from 'lucide-react';
 import { Card, CardHeader, Button, Badge, FormGrid, FormField, Input, Select, Textarea, Modal, Table } from '../components/UI';
 import { useApp } from '../context/AppContext';
+import { BackupSection } from '../components/BackupSection';
 
 const api = window.api || { invoke: mockInvoke };
 
@@ -278,6 +279,7 @@ export function BengkelSettings() {
           </div>
         </Card>
       </div>
+      <BackupSection />
     </div>
   );
 }

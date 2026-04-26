@@ -9,6 +9,10 @@ const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const isDev = process.env.NODE_ENV !== 'production';
+const { autoUpdater } = require('electron-updater');
+
+const { isAuthenticated, getAuthUrl, saveToken, uploadBackup, disconnectGoogle } = require('./backup');
+const { startScheduler, stopScheduler, isSchedulerRunning } = require('./scheduler');
 
 // ─── Database Setup ───────────────────────────────────────────────────────────
 let db;
@@ -101,6 +105,26 @@ app.whenReady().then(() => {
   initDatabase();
   createLoginWindow(); // Start with login
   // createMainWindow(); // Uncomment to skip login during dev
+
+  // Mulai scheduler backup otomatis (kalau sudah login Google)
+  if (isAuthenticated()) {
+    startScheduler(mainWindow);
+  }
+
+  // Cek update otomatis
+  autoUpdater.checkForUpdatesAndNotify();
+
+  // Notifikasi saat update siap
+  autoUpdater.on('update-downloaded', () => {
+    dialog.showMessageBox({
+      type: 'info',
+      title: 'Update Tersedia',
+      message: 'Versi baru sudah didownload. Restart untuk menginstall?',
+      buttons: ['Restart Sekarang', 'Nanti']
+    }).then(result => {
+      if (result.response === 0) autoUpdater.quitAndInstall();
+    });
+  });
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createLoginWindow();
@@ -366,7 +390,7 @@ async function callGroq(systemPrompt, userPrompt, maxTokens = 1024) {
       max_tokens: maxTokens,
       messages: [
         { role: 'system', content: systemPrompt },
-        { role: 'user',   content: userPrompt },
+        { role: 'user', content: userPrompt },
       ],
     }),
   });
@@ -679,6 +703,61 @@ ipcMain.handle('printer:printInvoice', async (_, invoiceId) => {
 function formatRupiah(n) {
   return 'Rp ' + Number(n).toLocaleString('id-ID');
 }
+
+
+// ─── IPC: Google Drive Backup ─────────────────────────────────────────────────
+
+// Cek status koneksi Google
+ipcMain.handle('backup:status', () => {
+  return {
+    connected: isAuthenticated(),
+    schedulerRunning: isSchedulerRunning(),
+  };
+});
+
+// Get URL untuk login Google
+ipcMain.handle('backup:getAuthUrl', () => {
+  return getAuthUrl();
+});
+
+// Simpan token setelah user paste auth code
+ipcMain.handle('backup:saveToken', async (_, code) => {
+  try {
+    await saveToken(code);
+    // Mulai scheduler setelah berhasil login
+    startScheduler(mainWindow);
+    return { success: true };
+  } catch (e) {
+    return { success: false, message: e.message };
+  }
+});
+
+// Backup manual
+ipcMain.handle('backup:runNow', async () => {
+  try {
+    const result = await uploadBackup();
+    return result;
+  } catch (e) {
+    return { success: false, message: e.message };
+  }
+});
+
+// Toggle scheduler on/off
+ipcMain.handle('backup:toggleScheduler', (_, enable) => {
+  if (enable) {
+    startScheduler(mainWindow);
+  } else {
+    stopScheduler();
+  }
+  return { success: true, running: isSchedulerRunning() };
+});
+
+// Disconnect Google Drive
+ipcMain.handle('backup:disconnect', () => {
+  stopScheduler();
+  return disconnectGoogle();
+});
+
 
 // ─── IPC: Window Controls (frameless) ────────────────────────────────────────
 ipcMain.on('window:minimize', () => {

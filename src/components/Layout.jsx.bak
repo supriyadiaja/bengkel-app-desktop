@@ -58,7 +58,7 @@ export default function Layout({ page, setPage, currentUser, onLogout, children,
               Bengkel Maju Jaya
             </div>
             <div style={{ fontSize: 9.5, color: 'var(--text3)', fontFamily: "'JetBrains Mono', monospace", marginTop: 2 }}>
-              v1.0 · BANDUNG
+              v1.0 · GARUT
             </div>
           </div>
         </div>
