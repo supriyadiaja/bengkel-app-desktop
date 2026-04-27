@@ -52,7 +52,8 @@
     "publish": {
       "provider": "github",
       "owner": "supriyadiaja",
-      "repo": "bengkel-app-desktop"
+      "repo": "bengkel-app-desktop",
+      "draft" : false
     },
     "directories": {
       "output": "dist",
