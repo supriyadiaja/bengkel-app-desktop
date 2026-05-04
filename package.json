@@ -1,6 +1,6 @@
 {
   "name": "bengkel-maju-jaya",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Aplikasi Manajemen Bengkel Motor - Desktop App",
   "main": "electron/main.js",
   "author": "Dua Putra Jaya Motor",
@@ -53,7 +53,7 @@
       "provider": "github",
       "owner": "supriyadiaja",
       "repo": "bengkel-app-desktop",
-      "draft" : false
+      "releaseType": "release"
     },
     "directories": {
       "output": "dist",

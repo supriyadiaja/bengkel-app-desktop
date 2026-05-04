@@ -121,21 +121,3 @@ INSERT OR IGNORE INTO pengaturan (key, value) VALUES
   ('pajak_persen',     '0'),
   ('app_version',      '1.0.0');
 
--- ============================================================
--- DEMO SEED DATA (hapus section ini di produksi jika perlu)
--- ============================================================
-INSERT OR IGNORE INTO pelanggan (id, nama, no_telp, jenis_motor, no_plat, tahun_motor, warna) VALUES
-  (1, 'Budi Santoso',    '0812-3456-7890', 'Honda Beat 2021',     'D 4521 BC', '2021', 'Hitam'),
-  (2, 'Siti Rahayu',     '0857-9876-5432', 'Yamaha NMAX 2022',    'D 7832 KJ', '2022', 'Putih'),
-  (3, 'Dedi Kurniawan',  '0821-1234-5678', 'Honda Vario 150',     'D 2341 XA', '2020', 'Biru'),
-  (4, 'Rina Marlina',    '0838-5555-1234', 'Suzuki GSX-R150',     'D 9912 MZ', '2023', 'Merah'),
-  (5, 'Ahmad Fauzi',     '0896-6789-0123', 'Honda PCX 160',       'D 1122 PQ', '2022', 'Abu');
-
-INSERT OR IGNORE INTO sparepart (kode, nama, kategori, stok, stok_minimum, harga_beli, harga_jual, satuan) VALUES
-  ('SP001', 'Oli Yamalube 10W-40 1L',        'Oli',    24, 10, 55000,  65000,  'Botol'),
-  ('SP002', 'Filter Udara Honda Beat',        'Filter',  3,  5, 35000,  45000,  'Pcs'),
-  ('SP003', 'Busi NGK CPR8EA',               'Busi',   18,  8, 20000,  28000,  'Pcs'),
-  ('SP004', 'Kampas Rem Depan Universal',     'Rem',     7,  6, 40000,  55000,  'Set'),
-  ('SP005', 'Rantai RK 428H 120 Mata',       'Rantai',  2,  4, 100000, 135000, 'Pcs'),
-  ('SP006', 'Ban IRC NR 53 80/90-14',        'Ban',     6,  4, 140000, 185000, 'Pcs'),
-  ('SP007', 'Aki Yuasa YTZ5S',              'Aki',     0,  2, 220000, 285000, 'Pcs');
